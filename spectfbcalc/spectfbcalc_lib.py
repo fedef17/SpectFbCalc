@@ -28,12 +28,53 @@ def mytestfunction():
 
 
 ###### INPUT/OUTPUT SECTION: load kernels, load data ######
+def load_spectral_kernel(cart_k: str, cart_out: str):
+    """Loads and preprocesses STE kernels for further analysis."""  
+  
+    tips = ['clr', 'cld']
+    vnams = ['temp_kac', 'ts_jac', 'wv_jac', 'o3_jac', 'ch4_jac', 'n2o_jac', 'co2_jac']
 
-def load_spectral_kernel():
+    allkers = dict()
+    
+    # Genera la coordinata temporale
+    time = pd.date_range('2008-01', periods=12*3, freq='M')
 
-    ## per ste
+    for tip in tips:
 
-    return allkers
+        # Costruisce la lista dei file specifici per ogni tip
+        file_pattern = os.path.join(cart_k, f"kernel_????_??_era_{tip}.nc")  
+        fils = sorted(glob.glob(file_pattern))  # Ordina i file per sicurezza
+  
+        
+        # Carica i file NetCDF
+        kernels = xr.open_mfdataset(fils, combine="by_coords", concat_dim="time", parallel=True)
+        
+        # Assegna la coordinata temporale
+        kernels_ok = kernels.assign_coords(time=time)
+
+        mean = kernels_ok.groupby('time.month').mean('time')
+        
+        for k in vnams:    
+            if k =='temp_kac':
+                mean.k=mean.k.rename({'level': 'player'})
+            if k=='ts_jac':
+                mean.k=mean.k.rename({'level': 'player'})
+            if k=='wv_jac':
+                mean.k=mean.k.rename({'level': 'player'})
+            if k=='o3_jac':
+                mean.k=mean.k.rename({'level': 'player'})
+            if k=='ch4_jac':
+                mean.k=mean.k.rename({'level': 'player'})
+            if k=='n2o_jac':
+                mean.k=mean.k.rename({'level': 'player'})
+            if k=='co2_jac':
+                mean.k=mean.k.rename({'level': 'player'})
+
+            allkers[(tip, k)] = mean.keys
+
+            return allkers
+
+
 
 #Definire una funzione di check che apra i file, controlli i nomi delle variabili, 
 # ##e nel caso non siano uniformi agli standard del codice chieda all'utente di cambiarli
@@ -455,9 +496,98 @@ def fb_planck_surf_from_file(config):
 
     return
 
+############# NEW FUNCTIONS FOR SPECTRAL KERNELS ########################
+# LOAD KERNEL PLANK SURFACE
 
-def fb_planck_surf_core(ds, ds_clim, kernels):
-    return
+
+    # Calcola anomalie dataset ds
+    # ERA5 skt = T surf, q = water vapor, t = T air (ERA5), ozone
+    # lat_range: tuple (lat_min, lat_max) per selezionare il range di latitudini (opzionale).
+    # lon_range: tuple (lon_min, lon_max) per selezionare il range di longitudini (opzionale).
+    # Ritorna: xarray.Dataset con il prodotto anomalie * kernel (media globale se non si specificano lat/lon).
+
+
+def fb_spectral_planck_surf(filin_4c:str, cart_out:str, ker:str, cart_k:str, lat_range=None, lon_range=None. time_chunk=12):
+
+    """  Computes the surface Planck feedback using temperature anomalies and precomputed kernels.
+
+    Parameters:
+    -----------
+    filin_4c : str
+        Path template for input NetCDF files with a placeholder for the variable name, 
+        such as 'ts'. Use `{}` for placeholders to enable string formatting.
+
+    cart_out : str
+        Path where output files will be saved.
+
+    ker : str
+        Specifies the kernel dataset to use: `'HUANG'` or `'ERA5'`.
+
+    cart_k : str
+        Path to the directory containing the kernel dataset files.
+
+    use_climatology : bool, optional (default=True)
+        If True, uses mean climatology from the precomputed PI files. 
+        If False, computes a running mean from PI files.
+
+    time_chunk : int, optional (default=12)
+        Chunk size for loading data with xarray to optimize memory usage.
+
+    Returns:
+    --------
+    feedbacks : dict
+        A dictionary containing the computed global annual mean surface Planck feedbacks for clear-sky 
+        (`clr`) and all-sky (`cld`) conditions. Keys of the dictionary:
+        - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
+        - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
+   
+    allkers=dict()
+    feedbacks=dict()
+
+
+    # KERNEL ############
+    # Check if the kernel file exists, if not, call the ker() function
+    if ker=='ste':
+        k_file_path = os.path.join(cart_out, 'k_'+ker+'.p')  # Name kernel files
+        if not os.path.exists(k_file_path):
+            allkers=dict()
+            allkers= load_spectral_kernel(cart_k, cart_out)  # Ensure that ker() is properly defined elsewhere in the code
+        else:
+            allkers=pickle.load(open(cart_out + 'allkers_'+ker+'.p', 'rb'))  #allkers_ste.p
+
+    for tip in ['clr', 'cld']:
+        kernel = allkers[(tip, 'ts')]
+
+
+    
+    # VARIABLE ############ apre file ERA5
+    filist = glob.glob(filin_4c.format('ts'))   
+    filist.sort()
+    var = xr.open_mfdataset(filist, chunks = {'time': time_chunk}, use_cftime=True)
+
+    # Condizione Lat, Lon
+    if lat_range is not None and lon_range is not None:
+        # Seleziona latitudine e longitudine per var
+        var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+    
+        # Seleziona latitudine e longitudine per kerel
+        kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+
+    var_clim = var.groupby('time.month').mean()
+    anoms =  var.groupby('time.month') - var_clim
+    anoms_monthly = anoms.groupby('time.month')
+
+    # Prodotto 
+
+    dRt = anoms_monthly*kernel
+    #dRt = dRt..groupby('time.year').mean('time')
+    dRt_glob = ctl.global_mean(dRt)
+    planck= dRt_glob.compute()
+    feedbacks[(tip, 'planck-surf')]=planck
+    planck.to_netcdf(cart_out+ "dRt_planck-surf_global_" +tip +cos+"-"+ker+"kernels.nc", format="NETCDF4")
+        
+    return(feedbacks)
+
 
 
 def fb_planck_surf(filin_4c:str, filin_pi:str, cart_out:str, ker:str, cart_k:str, use_climatology=True, time_chunk=12):
