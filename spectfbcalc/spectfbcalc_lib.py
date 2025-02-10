@@ -500,38 +500,25 @@ def fb_planck_surf_from_file(config):
 # LOAD KERNEL PLANK SURFACE
 
 
-    # Calcola anomalie dataset ds
-    # ERA5 skt = T surf, q = water vapor, t = T air (ERA5), ozone
-    # lat_range: tuple (lat_min, lat_max) per selezionare il range di latitudini (opzionale).
-    # lon_range: tuple (lon_min, lon_max) per selezionare il range di longitudini (opzionale).
-    # Ritorna: xarray.Dataset con il prodotto anomalie * kernel (media globale se non si specificano lat/lon).
+def fb_spectral_planck_surf_core(ds, allkers, ker:str, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
 
-
-def fb_spectral_planck_surf(filin_4c:str, cart_out:str, ker:str, cart_k:str, lat_range=None, lon_range=None. time_chunk=12):
-
-    """  Computes the surface Planck feedback using temperature anomalies and precomputed kernels.
+    """  Computes the radiative anomalies due to surface temperatures using surface temperature anomalies and precomputed kernels.
 
     Parameters:
     -----------
-    filin_4c : str
-        Path template for input NetCDF files with a placeholder for the variable name, 
-        such as 'ts'. Use `{}` for placeholders to enable string formatting.
+    ds: dataset variables
 
-    cart_out : str
-        Path where output files will be saved.
+    allkers: dataset kernels
 
-    ker : str
-        Specifies the kernel dataset to use: `'HUANG'` or `'ERA5'`.
+    ref_clim : climatology 
+    if you provide climatology dataset use_climatology=true
 
-    cart_k : str
-        Path to the directory containing the kernel dataset files.
-
-    use_climatology : bool, optional (default=True)
-        If True, uses mean climatology from the precomputed PI files. 
-        If False, computes a running mean from PI files.
+    ker:str to distinguish between kernel datasets
 
     time_chunk : int, optional (default=12)
         Chunk size for loading data with xarray to optimize memory usage.
+
+
 
     Returns:
     --------
@@ -541,51 +528,42 @@ def fb_spectral_planck_surf(filin_4c:str, cart_out:str, ker:str, cart_k:str, lat
         - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
         - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
    
-    allkers=dict()
+  
     feedbacks=dict()
 
+    if use_climatology:
+        if ref_clim is None:
+            raise ValueError("ref_clim must be provide if use_climatology is True")
+        var = ref_clim.ts
+    else:
+        var = ds.ts
 
-    # KERNEL ############
-    # Check if the kernel file exists, if not, call the ker() function
-    if ker=='ste':
-        k_file_path = os.path.join(cart_out, 'k_'+ker+'.p')  # Name kernel files
-        if not os.path.exists(k_file_path):
-            allkers=dict()
-            allkers= load_spectral_kernel(cart_k, cart_out)  # Ensure that ker() is properly defined elsewhere in the code
-        else:
-            allkers=pickle.load(open(cart_out + 'allkers_'+ker+'.p', 'rb'))  #allkers_ste.p
 
     for tip in ['clr', 'cld']:
         kernel = allkers[(tip, 'ts')]
 
-
-    
-    # VARIABLE ############ apre file ERA5
-    filist = glob.glob(filin_4c.format('ts'))   
-    filist.sort()
-    var = xr.open_mfdataset(filist, chunks = {'time': time_chunk}, use_cftime=True)
-
     # Condizione Lat, Lon
-    if lat_range is not None and lon_range is not None:
-        # Seleziona latitudine e longitudine per var
-        var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
-    
-        # Seleziona latitudine e longitudine per kerel
-        kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
-
-    var_clim = var.groupby('time.month').mean()
-    anoms =  var.groupby('time.month') - var_clim
-    anoms_monthly = anoms.groupby('time.month')
-
-    # Prodotto 
-
-    dRt = anoms_monthly*kernel
-    #dRt = dRt..groupby('time.year').mean('time')
-    dRt_glob = ctl.global_mean(dRt)
-    planck= dRt_glob.compute()
-    feedbacks[(tip, 'planck-surf')]=planck
-    planck.to_netcdf(cart_out+ "dRt_planck-surf_global_" +tip +cos+"-"+ker+"kernels.nc", format="NETCDF4")
+        if lat_range is not None and lon_range is not None:
+            # Seleziona latitudine e longitudine per var
+            var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
         
+            # Seleziona latitudine e longitudine per kerel
+            kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+
+
+ 
+
+        var_clim = var.groupby('time.month').mean()
+        anoms =  var.groupby('time.month') - var_clim
+        anoms_monthly = anoms.groupby('time.month')
+
+        # Prodotto 
+
+        dRt = anoms_monthly*kernel 
+        dRt_glob = ctl.global_mean(dRt)
+        planck= dRt_glob.compute()
+        feedbacks[(tip, 'planck-surf')] = planck
+
     return(feedbacks)
 
 
