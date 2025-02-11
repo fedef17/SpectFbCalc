@@ -11,6 +11,7 @@ import glob
 
 import numpy as np
 import xarray as xr
+import pandas as pd
 
 from climtools import climtools_lib as ctl
 from matplotlib import pyplot as plt
@@ -31,48 +32,54 @@ def mytestfunction():
 def load_spectral_kernel(cart_k: str, cart_out: str):
     """Loads and preprocesses STE kernels for further analysis."""  
   
-    tips = ['clr', 'cld']
-    vnams = ['temp_kac', 'ts_jac', 'wv_jac', 'o3_jac', 'ch4_jac', 'n2o_jac', 'co2_jac']
+    tips = ['cs','cld']
+    vnams = ['temp_jac', 'ts_jac', 'wv_jac', 'ozo_jac', 'ch4_jac', 'n2o_jac', 'co2_jac']
 
     allkers = dict()
     
-    # Genera la coordinata temporale
-    time = pd.date_range('2008-01', periods=12*3, freq='M')
+    # Define temporal coordinate
+    time = pd.date_range('2008-01', periods=12*3, freq='ME')
 
     for tip in tips:
 
-        # Costruisce la lista dei file specifici per ogni tip
+        # Create the files list for each tip 
         file_pattern = os.path.join(cart_k, f"kernel_????_??_era_{tip}.nc")  
-        fils = sorted(glob.glob(file_pattern))  # Ordina i file per sicurezza
+        fils = sorted(glob.glob(file_pattern))  # Sort files
   
-        
-        # Carica i file NetCDF
+        # Load kernels (3 years, 2008-2010)
         kernels = xr.open_mfdataset(fils, combine="by_coords", concat_dim="time", parallel=True)
         
-        # Assegna la coordinata temporale
-        kernels_ok = kernels.assign_coords(time=time)
+        # Assign temporal coordinate
+        kernels = kernels.assign_coords(time=time)
 
-        mean = kernels_ok.groupby('time.month').mean('time')
+        # Kernels monthly mean 
+        mean = kernels.groupby('time.month').mean('time')
         
-        for k in vnams:    
-            if k =='temp_kac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='ts_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='wv_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='o3_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='ch4_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='n2o_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='co2_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-
-            allkers[(tip, k)] = mean.keys
-
-            return allkers
+        for vna_local in vnams:
+            if vna_local =='temp_jac':
+                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                vna = 't'
+            if vna_local =='ts_jac':
+                vna = 'ts'
+            if vna_local =='wv_jac':
+                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                vna = 'wv_lw'
+            if vna_local =='ozo_jac':
+                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                vna = 'o3_lw'
+            if vna_local =='ch4_jac':
+                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                vna = 'ch4_lw'
+            if vna_local =='n2o_jac':
+                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                vna = 'n2o'
+            if vna_local =='co2_jac':
+                mean[vna_local]=mean[vna_local].rename({'lev': 'player'})
+                vna = 'co2_lw'
+            allkers[(tip, vna)] = mean[vna_local].sel(freq=slice(650,2750)) #frequency selection 650-2750 cm-1
+    
+    # Return kernels in a dictionary as dask arrays
+    return allkers
 
 
 
