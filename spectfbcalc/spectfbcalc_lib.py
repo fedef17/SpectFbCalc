@@ -31,46 +31,7 @@ def mytestfunction():
 def load_spectral_kernel(cart_k: str, cart_out: str):
     """Loads and preprocesses STE kernels for further analysis."""  
   
-    tips = ['clr', 'cld']
-    vnams = ['temp_kac', 'ts_jac', 'wv_jac', 'o3_jac', 'ch4_jac', 'n2o_jac', 'co2_jac']
 
-    allkers = dict()
-    
-    # Genera la coordinata temporale
-    time = pd.date_range('2008-01', periods=12*3, freq='M')
-
-    for tip in tips:
-
-        # Costruisce la lista dei file specifici per ogni tip
-        file_pattern = os.path.join(cart_k, f"kernel_????_??_era_{tip}.nc")  
-        fils = sorted(glob.glob(file_pattern))  # Ordina i file per sicurezza
-  
-        
-        # Carica i file NetCDF
-        kernels = xr.open_mfdataset(fils, combine="by_coords", concat_dim="time", parallel=True)
-        
-        # Assegna la coordinata temporale
-        kernels_ok = kernels.assign_coords(time=time)
-
-        mean = kernels_ok.groupby('time.month').mean('time')
-        
-        for k in vnams:    
-            if k =='temp_kac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='ts_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='wv_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='o3_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='ch4_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='n2o_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-            if k=='co2_jac':
-                mean.k=mean.k.rename({'level': 'player'})
-
-            allkers[(tip, k)] = mean.keys
 
             return allkers
 
@@ -500,7 +461,7 @@ def fb_planck_surf_from_file(config):
 # LOAD KERNEL PLANK SURFACE
 
 
-def fb_spectral_planck_surf_core(ds, allkers, ker:str, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
+def fb_spectral_planck_surf_core(ds, allkers, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
 
     """  Computes the radiative anomalies due to surface temperatures using surface temperature anomalies and precomputed kernels.
 
@@ -510,20 +471,17 @@ def fb_spectral_planck_surf_core(ds, allkers, ker:str, use_climatology=True, ref
 
     allkers: dataset kernels
 
-    ref_clim : climatology 
-    if you provide climatology dataset use_climatology=true
+    ref_clim : climatology ---- if you provide climatology dataset use_climatology=true
 
-    ker:str to distinguish between kernel datasets
+    ker:str to distinguish between kernel datasets (STE or HUANG)
 
     time_chunk : int, optional (default=12)
         Chunk size for loading data with xarray to optimize memory usage.
 
-
-
     Returns:
     --------
     feedbacks : dict
-        A dictionary containing the computed global annual mean surface Planck feedbacks for clear-sky 
+        A dictionary containing the radiative anomalies due to surface temperatures for clear-sky 
         (`clr`) and all-sky (`cld`) conditions. Keys of the dictionary:
         - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
         - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
@@ -559,12 +517,184 @@ def fb_spectral_planck_surf_core(ds, allkers, ker:str, use_climatology=True, ref
 
         # Prodotto 
 
-        dRt = anoms_monthly*kernel 
-        dRt_glob = ctl.global_mean(dRt)
+        if ker=='STE':
+
+            dRt = anoms_monthly*kernel 
+            dRt_glob = ctl.global_mean(dRt)
+
+        if ker=='HUANG':
+
+            dRt = anoms_monthly*kernel 
+            dRt_glob = ctl.global_mean(dRt)
+
         planck= dRt_glob.compute()
         feedbacks[(tip, 'planck-surf')] = planck
 
     return(feedbacks)
+
+
+
+def fb_spectral_planck_atmo_core(ds, allkers, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
+
+    """  Computes the radiative anomalies due to atmospheric temperatures using atmospheric temperature anomalies and precomputed kernels.
+
+      Parameters:
+    -----------
+    ds: dataset variables
+
+    allkers: dataset kernels
+
+    ref_clim : climatology ---- if you provide climatology dataset use_climatology=true
+
+    ker:str to distinguish between kernel datasets (STE or HUANG)
+
+    time_chunk : int, optional (default=12)
+        Chunk size for loading data with xarray to optimize memory usage.
+
+
+
+    Returns:
+    --------
+    feedbacks : dict
+        A dictionary containing radiative anomalies due to atmospheric temperatures for clear-sky 
+        (`clr`) and all-sky (`cld`) conditions. Keys of the dictionary:
+        - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
+        - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
+   
+  
+    feedbacks=dict()
+
+    if use_climatology:
+        if ref_clim is None:
+            raise ValueError("ref_clim must be provide if use_climatology is True")
+        var = ref_clim.t
+    else:
+        var = ds.t
+
+
+    for tip in ['clr', 'cld']:
+        kernel = allkers[(tip, 't')]
+
+    # Condizione Lat, Lon
+        if lat_range is not None and lon_range is not None:
+            # Seleziona latitudine e longitudine per var
+            var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+        
+            # Seleziona latitudine e longitudine per kerel
+            kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+
+
+ 
+
+        var_clim = var.groupby('time.month').mean()
+        anoms =  var.groupby('time.month') - var_clim
+        anoms_monthly = anoms.groupby('time.month')
+
+        # Prodotto 
+
+        if ker=='STE':
+
+            dRt = anoms_monthly*kernel 
+            dRt = dRt.sum(dim="level")
+            dRt_glob = ctl.global_mean(dRt)
+
+        if ker=='HUANG':
+
+            dRt = anoms_monthly*kernel 
+            dRt_glob = ctl.global_mean(dRt)
+
+        planck= dRt_glob.compute()
+        feedbacks[(tip, 'planck-atmo')] = planck
+
+    return(feedbacks)
+
+
+def fb_spectral_wv_core(ds, allkers, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
+
+    """  Computes the radiative anomalies due to water vapor concentration using  water vapor concentration anomalies and precomputed kernels.
+
+       Parameters:
+    -----------
+    ds: dataset variables
+
+    allkers: dataset kernels
+
+    ref_clim : climatology ---- if you provide climatology dataset use_climatology=true
+
+    ker:str to distinguish between kernel datasets (STE or HUANG)
+
+    time_chunk : int, optional (default=12)
+        Chunk size for loading data with xarray to optimize memory usage.
+
+
+    Returns:
+    --------
+    feedbacks : dict
+        A dictionary containingthe radiative anomalies due to water vapor concentration for clear-sky 
+        (`clr`) and all-sky (`cld`) conditions. Keys of the dictionary:
+        - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
+        - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
+   
+  
+    feedbacks=dict()
+
+    if use_climatology:
+        if ref_clim is None:
+            raise ValueError("ref_clim must be provide if use_climatology is True")
+        var = ref_clim.wv
+    else:
+        var = ds.wv
+        var = q_to_ppmv(var) # from kg/kg to ppmv
+
+
+    for tip in ['clr', 'cld']:
+        kernel = allkers[(tip, 'wv')]
+
+    # Condizione Lat, Lon
+        if lat_range is not None and lon_range is not None:
+            # Seleziona latitudine e longitudine per var
+            var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+        
+            # Seleziona latitudine e longitudine per kerel
+            kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+
+
+ 
+
+        var_clim = var.groupby('time.month').mean()
+        anoms =  var.groupby('time.month') - var_clim
+        anoms_monthly = anoms.groupby('time.month')
+
+        # Prodotto 
+
+        if ker=='STE':
+            # WV in ppmv
+
+            dRt = anoms_monthly*kernel 
+            dRt = dRt.sum(dim="level")
+            dRt_glob = ctl.global_mean(dRt)
+
+        if ker=='HUANG':
+            # CAMBIA TUTTO
+
+            dRt = anoms_monthly*kernel 
+            dRt_glob = ctl.global_mean(dRt)
+
+        planck= dRt_glob.compute()
+        feedbacks[(tip, 'wv')] = planck
+
+    return(feedbacks)
+
+
+# FUNCTION FOR WV ANOMALIES
+# From Mass mixing Ratio (kg/kg to ppmv)
+def q_to_ppmv(q_inp):
+    Ma = 28.97  # Molecular weight of dry air
+    Mw = 18.02  # Molecular weight of water vapor
+    vw_ppmv = q_inp / (1 - q_inp) * (Ma / Mw) * 10**6
+    return vw_ppmv
+
+############# FINE NEW FUNCTIONS FOR SPECTRAL KERNELS ########################
 
 
 
@@ -937,6 +1067,8 @@ def fb_albedo(filin_4c:str, filin_pi:str, cart_out:str, ker:str, cart_k:str, use
         alb.to_netcdf(cart_out+ "dRt_albedo_global_" +tip +cos+"-"+ker+"kernels.nc", format="NETCDF4")
         
     return(feedbacks)
+
+
 
 ##CALCOLO W-V
 def fb_wv(filin_4c:str, filin_pi:str, cart_out:str, ker:str, cart_k:str, pressure_directory:str,  use_climatology=True, time_chunk=12):
