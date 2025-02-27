@@ -34,6 +34,7 @@ def load_spectral_kernel(cart_k: str, cart_out: str):
   
     tips = ['cs','cld']
     vnams = ['temp_jac', 'ts_jac', 'wv_jac', 'ozo_jac', 'ch4_jac', 'n2o_jac', 'co2_jac']
+    finam = "kernel_????_??_era_{}.nc"
 
     allkers = dict()
     
@@ -43,7 +44,7 @@ def load_spectral_kernel(cart_k: str, cart_out: str):
     for tip in tips:
 
         # Create the files list for each tip 
-        file_pattern = os.path.join(cart_k, f"kernel_????_??_era_{tip}.nc")  
+        file_pattern = os.path.join(cart_k, finam.format(tip))  
         fils = sorted(glob.glob(file_pattern))  # Sort files
   
         # Load kernels (3 years, 2008-2010)
@@ -78,6 +79,10 @@ def load_spectral_kernel(cart_k: str, cart_out: str):
                 vna = 'co2_lw'
             allkers[(tip, vna)] = mean[vna_local].sel(freq=slice(650,2750)) #frequency selection 650-2750 cm-1
     
+    k = allkers[('cld', 't')]
+    pickle.dump(k, open(cart_out + 'k_STE.p', 'wb'))
+    pickle.dump(allkers, open(cart_out + 'allkers_STE.p', 'wb'))
+
     # Return kernels in a dictionary as dask arrays
     return allkers
 
