@@ -512,7 +512,7 @@ def fb_planck_surf_from_file(config):
 # LOAD KERNEL PLANK SURFACE
 
 
-def fb_spectral_planck_surf_core(ds, allkers, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
+def fb_spectral_planck_surf_core(ds, allkers, ker:str, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
 
     """  Computes the radiative anomalies due to surface temperatures using surface temperature anomalies and precomputed kernels.
 
@@ -540,12 +540,14 @@ def fb_spectral_planck_surf_core(ds, allkers, use_climatology=True, ref_clim=Non
   
     feedbacks=dict()
 
+    var = ds.ts
+
     if use_climatology:
         if ref_clim is None:
             raise ValueError("ref_clim must be provide if use_climatology is True")
-        var = ref_clim.ts
+        var_clim = ref_clim.ts
     else:
-        var = ds.ts
+        var_clim = var.groupby('time.month').mean()
 
 
     for tip in ['clr', 'cld']:
@@ -553,16 +555,12 @@ def fb_spectral_planck_surf_core(ds, allkers, use_climatology=True, ref_clim=Non
 
     # Condizione Lat, Lon
         if lat_range is not None and lon_range is not None:
+
             # Seleziona latitudine e longitudine per var
-            var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
-        
-            # Seleziona latitudine e longitudine per kerel
-            kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+            var = ctl.sel_area_xr(var,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
+            var_clim = ctl.sel_area_xr(var_clim,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
+            kernel = ctl.sel_area_xr(kernel,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
 
-
- 
-
-        var_clim = var.groupby('time.month').mean()
         anoms =  var.groupby('time.month') - var_clim
         anoms_monthly = anoms.groupby('time.month')
 
@@ -585,7 +583,7 @@ def fb_spectral_planck_surf_core(ds, allkers, use_climatology=True, ref_clim=Non
 
 
 
-def fb_spectral_planck_atmo_core(ds, allkers, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
+def fb_spectral_planck_atmo_core(ds, allkers, ker:str, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
 
     """  Computes the radiative anomalies due to atmospheric temperatures using atmospheric temperature anomalies and precomputed kernels.
 
@@ -612,32 +610,30 @@ def fb_spectral_planck_atmo_core(ds, allkers, use_climatology=True, ref_clim=Non
         - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
         - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
    
+
+    var = ds.t
   
     feedbacks=dict()
 
     if use_climatology:
         if ref_clim is None:
             raise ValueError("ref_clim must be provide if use_climatology is True")
-        var = ref_clim.t
+        var_clim = ref_clim.t
     else:
-        var = ds.t
-
+        var_clim = var.groupby('time.month').mean()
 
     for tip in ['clr', 'cld']:
         kernel = allkers[(tip, 't')]
 
     # Condizione Lat, Lon
         if lat_range is not None and lon_range is not None:
+
             # Seleziona latitudine e longitudine per var
-            var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
-        
-            # Seleziona latitudine e longitudine per kerel
-            kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+                var = ctl.sel_area_xr(var,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
+                var_clim = ctl.sel_area_xr(var_clim,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
+                kernel = ctl.sel_area_xr(kernel,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
 
 
- 
-
-        var_clim = var.groupby('time.month').mean()
         anoms =  var.groupby('time.month') - var_clim
         anoms_monthly = anoms.groupby('time.month')
 
@@ -654,13 +650,13 @@ def fb_spectral_planck_atmo_core(ds, allkers, use_climatology=True, ref_clim=Non
             dRt = anoms_monthly*kernel 
             dRt_glob = ctl.global_mean(dRt)
 
-        planck= dRt_glob.compute()
+        planck = dRt_glob.compute()
         feedbacks[(tip, 'planck-atmo')] = planck
 
     return(feedbacks)
 
 
-def fb_spectral_wv_core(ds, allkers, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
+def fb_spectral_wv_core(ds, allkers, ker:str, use_climatology=True, ref_clim=None, lat_range=None, lon_range=None, time_chunk=12):
 
     """  Computes the radiative anomalies due to water vapor concentration using  water vapor concentration anomalies and precomputed kernels.
 
@@ -686,16 +682,18 @@ def fb_spectral_wv_core(ds, allkers, use_climatology=True, ref_clim=None, lat_ra
         - `('clr', 'planck-surf')`: Clear-sky surface Planck feedback.
         - `('cld', 'planck-surf')`: All-sky surface Planck feedback. """
    
-  
+    var = ds.wv
+ 
     feedbacks=dict()
 
     if use_climatology:
         if ref_clim is None:
             raise ValueError("ref_clim must be provide if use_climatology is True")
-        var = ref_clim.wv
+        var_clim = ref_clim.wv
+        var_clim = q_to_ppmv(var_clim)
     else:
-        var = ds.wv
-        var = q_to_ppmv(var) # from kg/kg to ppmv
+        var_clim = var.groupby('time.month').mean()
+        var_clim = q_to_ppmv(var_clim)
 
 
     for tip in ['clr', 'cld']:
@@ -703,16 +701,12 @@ def fb_spectral_wv_core(ds, allkers, use_climatology=True, ref_clim=None, lat_ra
 
     # Condizione Lat, Lon
         if lat_range is not None and lon_range is not None:
+
             # Seleziona latitudine e longitudine per var
-            var = var.sel(lat=slice(*lat_range), lon=slice(*lon_range))
-        
-            # Seleziona latitudine e longitudine per kerel
-            kernel = kernel.sel(lat=slice(*lat_range), lon=slice(*lon_range))
+                var = ctl.sel_area_xr(var,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
+                var_clim = ctl.sel_area_xr(var_clim,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
+                kernel = ctl.sel_area_xr(kernel,(lon_range[0],lon_range[1],lat_range[0],lat_range[1]))
 
-
- 
-
-        var_clim = var.groupby('time.month').mean()
         anoms =  var.groupby('time.month') - var_clim
         anoms_monthly = anoms.groupby('time.month')
 
@@ -720,14 +714,12 @@ def fb_spectral_wv_core(ds, allkers, use_climatology=True, ref_clim=None, lat_ra
 
         if ker=='STE':
             # WV in ppmv
-
             dRt = anoms_monthly*kernel 
             dRt = dRt.sum(dim="level")
             dRt_glob = ctl.global_mean(dRt)
 
         if ker=='HUANG':
             # CAMBIA TUTTO
-
             dRt = anoms_monthly*kernel 
             dRt_glob = ctl.global_mean(dRt)
 
