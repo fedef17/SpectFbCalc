@@ -31,61 +31,54 @@ def mytestfunction():
 ###### INPUT/OUTPUT SECTION: load kernels, load data ######
 def load_spectral_kernel(cart_k: str, cart_out: str):
     """Loads and preprocesses STE kernels for further analysis."""  
-  
+    
     tips = ['cs','cld']
-    vnams = ['temp_jac', 'ts_jac', 'wv_jac', 'ozo_jac', 'ch4_jac', 'n2o_jac', 'co2_jac']
-    finam = "kernel_????_??_era_{}.nc"
-
+    vnams = ['temp_jac', 'ts_jac', 'wv_jac', 'ozo_jac','ch4_jac', 'n2o_jac', 'co2_jac']
+    finam = 'spectral_kernel_ste_{}.nc'
+    
     allkers = dict()
     
-    # Define temporal coordinate
-    time = pd.date_range('2008-01', periods=12*3, freq='ME')
-
     for tip in tips:
-
-        # Create the files list for each tip 
-        file_pattern = os.path.join(cart_k, finam.format(tip))  
-        fils = sorted(glob.glob(file_pattern))  # Sort files
-  
-        # Load kernels (3 years, 2008-2010)
-        kernels = xr.open_mfdataset(fils, combine="by_coords", concat_dim="time", parallel=True)
         
-        # Assign temporal coordinate
-        kernels = kernels.assign_coords(time=time)
-
-        # Kernels monthly mean 
-        mean = kernels.groupby('time.month').mean('time')
+        # Load kernels NetCDF files (3 years mean 2008-2010)
+        kernels = xr.open_dataset(cart_k + finam.format(tip),chunks={'time':12})
         
         for vna_local in vnams:
+            print(vna_local)
             if vna_local =='temp_jac':
-                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                kernels[vna_local] = kernels[vna_local].rename({'lev': 'player'})
                 vna = 't'
             if vna_local =='ts_jac':
                 vna = 'ts'
             if vna_local =='wv_jac':
-                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                kernels[vna_local] = kernels[vna_local].rename({'lev': 'player'})
                 vna = 'wv_lw'
             if vna_local =='ozo_jac':
-                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                kernels[vna_local] = kernels[vna_local].rename({'lev': 'player'})
                 vna = 'o3_lw'
             if vna_local =='ch4_jac':
-                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                kernels[vna_local] = kernels[vna_local].rename({'lev': 'player'})
                 vna = 'ch4_lw'
             if vna_local =='n2o_jac':
-                mean[vna_local] = mean[vna_local].rename({'lev': 'player'})
+                kernels[vna_local] = kernels[vna_local].rename({'lev': 'player'})
                 vna = 'n2o'
             if vna_local =='co2_jac':
-                mean[vna_local]=mean[vna_local].rename({'lev': 'player'})
+                kernels[vna_local] = kernels[vna_local].rename({'lev': 'player'})
                 vna = 'co2_lw'
-            allkers[(tip, vna)] = mean[vna_local].sel(freq=slice(650,2750)) #frequency selection 650-2750 cm-1
+            if tip == 'cs' or 'forum_cs':
+                tip = 'clr'
+            
+            allkers[(tip, vna)] = kernels[vna_local].sel(freq=slice(650,2750)) #frequency selection 650-2750 cm-1 
+            
+            #Save all kernels, t kernel and pressure levels to an external file
+            k = allkers[('cld', 't')]
+            vlevs = xr.load_dataset( cart_k + finam.format(tip),chunks={'time':12})['lev']
+            vlevs = vlevs.rename({'lev': 'player'})
+            pickle.dump(k, open(cart_out + 'k_STE.p', 'wb'))
+            pickle.dump(allkers, open(cart_out + 'allkers_STE.p', 'wb'))
+            pickle.dump(vlevs, open(cart_out + 'vlevs_ERA5.p', 'wb')) #save vlevs
     
-    k = allkers[('cld', 't')]
-    pickle.dump(k, open(cart_out + 'k_STE.p', 'wb'))
-    pickle.dump(allkers, open(cart_out + 'allkers_STE.p', 'wb'))
-
-    # Return kernels in a dictionary as dask arrays
     return allkers
-
 
 
 #Definire una funzione di check che apra i file, controlli i nomi delle variabili, 
