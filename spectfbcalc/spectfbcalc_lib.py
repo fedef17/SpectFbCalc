@@ -2356,7 +2356,7 @@ def calc_fb(experiment, control, kernel, cart_out, use_strat_mask=True, save_pat
 
     """
 
-    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern)
+    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False)
     
     fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo']
     dRt={}
@@ -2406,6 +2406,7 @@ def calc_fb(experiment, control, kernel, cart_out, use_strat_mask=True, save_pat
                 print(f"Computing spatial feedback pattern for {tip}-{fbn}...")
                 # Open the dRt pattern
                 feedbacks_pattern = xr.open_dataarray(cart_out+"dRt_"+fbn+"_pattern_"+tip +".nc", decode_times=time_coder) 
+                feedbacks_pattern = feedbacks_pattern.groupby('time.year').mean('time')
                 start_year = int(feedbacks_pattern.year.min())
                 feedbacks_pattern_dec = feedbacks_pattern.groupby((feedbacks_pattern.year - start_year) // num_year_fb * num_year_fb).mean('year')
                 feedbacks_pattern_dec = feedbacks_pattern_dec.chunk({'year': -1})
@@ -2417,7 +2418,7 @@ def calc_fb(experiment, control, kernel, cart_out, use_strat_mask=True, save_pat
 
     dRt[('cld', 'cloud')]=dRt[('cld', 'cloud')].groupby('time.year').mean('time')
     start_year = int(dRt[('cld', 'cloud')].year.min())
-    feedback=dRt[('cld', 'cloud')].groupby((dRt[('cld', 'cloud')].year-start_year) // num * num).mean()
+    feedback=dRt[('cld', 'cloud')].groupby((dRt[('cld', 'cloud')].year-start_year) // num_year_fb * num_year_fb).mean()
     res = stats.linregress(gtas, feedback)
    
    #error computed with bootstrap
@@ -2495,7 +2496,7 @@ def calc_fb_interannual(experiment, control, kernel, cart_out, use_strat_mask=Tr
 
     """ 
 
-    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern)
+    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False)
     
     fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo']
     dRt={}
@@ -2539,6 +2540,7 @@ def calc_fb_interannual(experiment, control, kernel, cart_out, use_strat_mask=Tr
                 print(f"Computing spatial feedback pattern for {tip}-{fbn}...")
                 # Open the dRt pattern
                 feedbacks_pattern = xr.open_dataarray(cart_out+"dRt_"+fbn+"_pattern_"+tip+ ".nc", decode_times=time_coder)
+                feedbacks_pattern = feedbacks_pattern.groupby('time.year').mean('time')
                 feedbacks_pattern_dec=calc_inter(feedbacks_pattern, running_years)              
 
                 feedbacks_pattern_dec = feedbacks_pattern_dec.chunk({'year': -1})
@@ -2575,7 +2577,7 @@ def calc_fb_interannual(experiment, control, kernel, cart_out, use_strat_mask=Tr
     }
 
 
-def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_strat_mask=True, save_pattern=False, num=10):
+def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_strat_mask=True, save_pattern=False, num_year_fb=10):
     """
     Compute interannual radiative feedback for a single radiative component.
 
@@ -2652,7 +2654,7 @@ def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_s
 
     gtas = ctl.global_mean(experiment.ds_anom['tas']).groupby('time.year').mean('time')
     start_year = int(gtas.year.min()) 
-    gtas = gtas.groupby((gtas.year-start_year) // num * num).mean()
+    gtas = gtas.groupby((gtas.year-start_year) // num_year_fb * num_year_fb).mean()
     
     if name != 'cloud':
         path = os.path.join(cart_out, "dRt_"+name+"_global_clr.nc")
@@ -2684,7 +2686,7 @@ def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_s
             feedbacks=xr.open_dataarray(cart_out+"dRt_" +name+"_global_"+tip+".nc",  decode_times=time_coder)
             feedbacks=feedbacks.groupby('time.year').mean('time')
             start_year = int(feedbacks.year.min())
-            feedback=feedbacks.groupby((feedbacks.year-start_year) // num * num).mean()
+            feedback=feedbacks.groupby((feedbacks.year-start_year) // num_year_fb * num_year_fb).mean()
 
             res = stats.linregress(gtas, feedback)
 
@@ -2706,7 +2708,7 @@ def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_s
         feedbacks=xr.open_dataarray(cart_out+"dRt_" +name+"_global.nc",  decode_times=time_coder)
         feedbacks=feedbacks.groupby('time.year').mean('time')
         start_year = int(feedbacks.year.min())
-        feedback=feedbacks.groupby((feedbacks.year-start_year) // num * num).mean()
+        feedback=feedbacks.groupby((feedbacks.year-start_year) //num_year_fb * num_year_fb).mean()
         res = stats.linregress(gtas, feedback)
 
         #error computed with bootstrap
@@ -2727,6 +2729,7 @@ def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_s
         print(f"Computing spatial feedback pattern for {tip}-{name}...")
         # Open the dRt pattern
         feedbacks_pattern = xr.open_dataarray(cart_out+"dRt_"+name+"_pattern_"+tip +".nc", decode_times=time_coder) 
+        feedbacks_pattern = feedbacks_pattern.groupby('time.year').mean('time')
         start_year = int(feedbacks_pattern.year.min())
         feedbacks_pattern_dec = feedbacks_pattern.groupby((feedbacks_pattern.year - start_year) // num_year_fb * num_year_fb).mean('year')
         feedbacks_pattern_dec = feedbacks_pattern_dec.chunk({'year': -1})
@@ -2740,3 +2743,30 @@ def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_s
         "fb_coeffs": fb,
         "fb_pattern": fb_pattern if save_pattern else None,
         }
+
+def calc_fb_spectral(experiment, control, kernel, cart_out, use_strat_mask=True, save_pattern=False, num_year_fb=10):
+
+    gtas = ctl.global_mean(experiment.ds_anom['tas']).groupby('time.year').mean('time')
+    start_year = int(gtas.year.min()) 
+    gtas = gtas.groupby((gtas.year-start_year) // num_year_fb * num_year_fb).mean()
+    gtas= gtas.chunk({'year': -1})
+
+    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False)
+    
+    fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'lw_water-vapor']
+    dRt={}
+    fb_coef = dict()
+    dRt=open_dRt(cart_out, fbnams)
+
+    for tip in ['clr', 'cld']:
+        for fbn in fbnams:
+            dRt[(tip, fbn)]=dRt[(tip, fbn)].groupby('time.year').mean('time')
+            start_year = int(dRt[(tip, fbn)].year.min())
+            feedback=dRt[(tip, fbn)].groupby((dRt[(tip, fbn)].year-start_year) // num_year_fb * num_year_fb).mean()
+            feedback=feedback.chunk({'year': -1})
+            slope, stderr = sfc.regress_pattern_vectorized(feedback, gtas)
+            fb_coef[(tip, fbn)]= (slope, stderr)
+            slope.to_netcdf(cart_out + "feedback_"+ fbn +"_" + tip + ".nc", format="NETCDF4")
+            stderr.to_netcdf(cart_out + "feedback_error_"+ fbn +"_" + tip + ".nc", format="NETCDF4")
+
+    return fb_coef
