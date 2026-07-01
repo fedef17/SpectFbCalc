@@ -858,7 +858,7 @@ def load_spectral_kernel(cart_k: str):
         "temp_jac": "t",
         "ts_jac":   "ts",
         "linear_wv_jac":   "wv_lw_lin",
-        "logaritmic_wv_jac":   "wv_lw_log",
+        "logarithmic_wv_jac":   "wv_lw_log",
         "ozo_jac":   "ozo",
         "co2_jac":   "co2",
         "ch4_jac":   "ch4",
@@ -2016,12 +2016,11 @@ def Rad_anomaly_wv(experiment, control, kernel, cart_out, use_strat_mask=True, s
             if kernel.name != 'SPECTRAL':
                 dRt_lw.name = "dRt_lw"
                 dRt_lw.attrs["description"] = f"{tip} water vapor dRt_lw pattern"
-                dRt_lw.to_netcdf(cart_out + "dRt_lw_water-vapor_pattern_" + tip +  ".nc", format="NETCDF4")
+                dRt_lw.to_netcdf(cart_out + "dRt_water-vapor-lw_pattern_" + tip +  ".nc", format="NETCDF4")
                 dRt_sw.name = "dRt_sw"
                 dRt_sw.attrs["description"] = f"{tip} water vapor dRt_sw pattern"
-                dRt_sw.to_netcdf(cart_out + "dRt_sw_water-vapor_pattern_" + tip +  ".nc", format="NETCDF4")
+                dRt_sw.to_netcdf(cart_out + "dRt_water-vapor-sw_pattern_" + tip +  ".nc", format="NETCDF4")
 
-        print('Before WV computation')
 
         if kernel.name=='SPECTRAL':
             if kernel.wv_method == 'linear':
@@ -2051,7 +2050,6 @@ def Rad_anomaly_wv(experiment, control, kernel, cart_out, use_strat_mask=True, s
         else:
             dRt_glob_lw = ctl.global_mean(dRt_lw)
             dRt_glob_lw.load()
-            print('Computed')
 
         dRt_glob_lw.name='water-vapor-lw'
         dRt_glob_lw.to_netcdf(cart_out+ "dRt_water-vapor-lw_global_" +tip+ ".nc", format="NETCDF4")
@@ -2433,8 +2431,21 @@ def calc_fb(experiment, control, kernel, cart_out, use_strat_mask=True, save_pat
     pvalue=res.pvalue,
     stderr=bs.standard_error,
     ci_low=bs.confidence_interval.low,
-    ci_high=bs.confidence_interval.high,
-)
+    ci_high=bs.confidence_interval.high)
+
+    if save_pattern:
+        print(f"Computing spatial feedback pattern for cloud...")
+                # Open the dRt pattern
+        feedbacks_pattern = xr.open_dataarray(cart_out+"dRt_cloud_pattern.nc", decode_times=time_coder) 
+        feedbacks_pattern = feedbacks_pattern.groupby('time.year').mean('time')
+        start_year = int(feedbacks_pattern.year.min())
+        feedbacks_pattern_dec = feedbacks_pattern.groupby((feedbacks_pattern.year - start_year) // num_year_fb * num_year_fb).mean('year')
+        feedbacks_pattern_dec = feedbacks_pattern_dec.chunk({'year': -1})
+                # Perform regression at each grid point
+        slope, stderr = regress_pattern_vectorized(feedbacks_pattern_dec, gtas)
+        fb_pattern[(tip, fbn)] = (slope, stderr)
+        slope.to_netcdf(cart_out + "feedback_pattern_cloud.nc", format="NETCDF4")
+        stderr.to_netcdf(cart_out + "feedback_pattern_error_cloud.nc", format="NETCDF4")
     
     return {
         "fb_coeffs": fb_coef,
@@ -2764,7 +2775,7 @@ def calc_fb_spectral(experiment, control, kernel, cart_out, use_strat_mask=True,
             start_year = int(dRt[(tip, fbn)].year.min())
             feedback=dRt[(tip, fbn)].groupby((dRt[(tip, fbn)].year-start_year) // num_year_fb * num_year_fb).mean()
             feedback=feedback.chunk({'year': -1})
-            slope, stderr = sfc.regress_pattern_vectorized(feedback, gtas)
+            slope, stderr = regress_pattern_vectorized(feedback, gtas)
             fb_coef[(tip, fbn)]= (slope, stderr)
             slope.to_netcdf(cart_out + "feedback_"+ fbn +"_" + tip + ".nc", format="NETCDF4")
             stderr.to_netcdf(cart_out + "feedback_error_"+ fbn +"_" + tip + ".nc", format="NETCDF4")
