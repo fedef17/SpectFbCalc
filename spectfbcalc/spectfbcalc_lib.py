@@ -2588,7 +2588,7 @@ def calc_fb_interannual(experiment, control, kernel, cart_out, use_strat_mask=Tr
     }
 
 
-def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_strat_mask=True, save_pattern=False, num_year_fb=10):
+def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_strat_mask=True, save_pattern=False, num_year_fb=10) -> dict[str, Any]: 
     """
     Compute interannual radiative feedback for a single radiative component.
 
@@ -2755,14 +2755,14 @@ def calc_single_feedback(name, experiment, kernel, cart_out, control=None, use_s
         "fb_pattern": fb_pattern if save_pattern else None,
         }
 
-def calc_fb_spectral(experiment, control, kernel, cart_out, use_strat_mask=True, save_pattern=False, num_year_fb=10):
+def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, control:  Experiment | None = None,  use_strat_mask: bool = True, save_pattern: bool = False, num_year_fb: int = 10):
 
     gtas = ctl.global_mean(experiment.ds_anom['tas']).groupby('time.year').mean('time')
     start_year = int(gtas.year.min()) 
     gtas = gtas.groupby((gtas.year-start_year) // num_year_fb * num_year_fb).mean()
     gtas= gtas.chunk({'year': -1})
 
-    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False)
+    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False) 
     
     fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'lw_water-vapor']
     dRt={}
