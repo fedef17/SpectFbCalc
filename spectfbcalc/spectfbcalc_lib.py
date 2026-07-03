@@ -1885,7 +1885,7 @@ def Rad_anomaly_albedo(experiment, kernel, cart_out, save_pattern=False):
 
     for tip in [ 'clr','cld']:
         k = kernel.kernel[(tip, 'alb')]
-        dRt = (experiment.ds_anom['alb'].groupby("time.month") * k)
+        dRt = 100*(experiment.ds_anom['alb'].groupby("time.month") * k)
             
         #Save full dRt pattern before global averaging
         if save_pattern:
@@ -1895,7 +1895,7 @@ def Rad_anomaly_albedo(experiment, kernel, cart_out, save_pattern=False):
 
         #Then compute and save global mean
         dRt_glob = ctl.global_mean(dRt).compute()
-        alb = 100*dRt_glob
+        alb = dRt_glob
         alb.name='albedo'
         radiation[(tip, 'albedo')]= alb
         alb.to_netcdf(cart_out+ "dRt_albedo_global_" +tip + ".nc", format="NETCDF4")
@@ -2240,7 +2240,7 @@ def calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=True, save_
     if kernel.name != 'SPECTRAL':
         path = os.path.join(cart_out, "dRt_water-vapor_global_clr.nc")
     else:
-        path = os.path.join(cart_out, "dRt_lw_water-vapor_global_clr.nc")
+        path = os.path.join(cart_out, "dRt_water-vapor-lw_global_clr.nc")
     if not os.path.exists(path) or force_recompute:
         anom_wv = Rad_anomaly_wv(experiment, control, kernel, cart_out, use_strat_mask, save_pattern)
     else:
@@ -2764,7 +2764,7 @@ def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, cont
 
     _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False) 
     
-    fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'lw_water-vapor']
+    fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor-lw']
     dRt={}
     fb_coef = dict()
     dRt=open_dRt(cart_out, fbnams)
