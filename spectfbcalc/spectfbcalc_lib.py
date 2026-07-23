@@ -58,7 +58,7 @@ STD_VARS = {"hus", "rlut", "rsdt", "rlutcs", "alb", "rsut", "rsutcs", "ta", "tas
 STD_VARS_LOGQ = {"hus_log", "rlut", "rsdt", "rlutcs", "alb", "rsut", "rsutcs", "ta", "tas", "ts"}
 STD_VARS_NOALB = {"hus", "rlut", "rsdt", "rlutcs", "rsut", "rsutcs", "ta", "tas", "ts", "rsds", "rsus"}
 STD_VARS_ECE4 = {"hus", "rlut", "rsdt", "rlntcs", "rsut", "rsntcs", "alb", "ta", "tas", "ts"}
-STD_VARS_SPECT = {"wv_vmr", "wv_vmr_log", "rlut", "rsdt", "rlutcs", "alb", "rsut", "rsutcs", "ta", "tas", "ts"}
+STD_VARS_SPECT = {"hus", "rlut", "rsdt", "rlutcs", "ta", "tas", "ts"}
 
 
 def regrid(ds: xr.DataArray | xr.Dataset, target_ds: xr.Dataset | xr.DataArray) -> xr.DataArray | xr.Dataset:
@@ -118,12 +118,15 @@ class Kernel:
         self.name = name
         if config is not None:
             self.cart_k = config['kernels'][name]['path_input']
-            self.filename_template = config['kernels'][name]['filename_template']
+            self.filename_template = None
+            if name != 'SPECTRAL':
+                self.filename_template = config['kernels'][name]['filename_template']
         else:
             if path_input is None: raise ValueError(f"config is None and path_input not provided for kernel {self.name}")
-            if filename_template is None: raise ValueError(f"config is None and filename_template not provided for kernel {self.name}")
             self.cart_k = path_input
-            self.filename_template = filename_template
+            if name != 'SPECTRAL':
+                if filename_template is None: raise ValueError(f"config is None and filename_template not provided for kernel {self.name}")
+                self.filename_template = filename_template
 
         print(f"Loading kernel: {name}")
         self.kernel, self.dp = load_kernel(self.name, self.cart_k, finam = self.filename_template)
@@ -745,9 +748,12 @@ class Experiment:
         if 'hus_log' in self.ds.data_vars:
             print('hus_log already in ds')
         else:
-            print('Applying log to hus')
-            self.ds['hus_log'] = da.log(self.ds['hus'])
-            del self.ds['hus']   
+            if 'hus' in self.ds.data_vars:
+                print('Applying log to hus')
+                self.ds['hus_log'] = da.log(self.ds['hus'])
+                del self.ds['hus'] 
+            else:
+                raise ValueError(' no hus variable in dataset')
  
     
     def check_albedo(self) -> None:
@@ -784,55 +790,58 @@ class Experiment:
         if 'wv_vmr' in self.ds.data_vars:
             print('wv_vmr already in ds')
         else:
-            print('Converting hus to wv vmr')
-            self.ds['wv_vmr'] = q_to_ppmv(self.ds['hus'])
-            self.ds['wv_vmr_log'] = da.log(self.ds['wv_vmr'])
-            del self.ds['hus']
-
-
-    def check_vars(self, variables: set[str] | list[str] | tuple[str] = STD_VARS_LOGQ) -> None:
-        """
-        Checks if all variables needed are loaded. If some are missing, 
-        tries to compute them from available variables (e.g., rsutcs from rsntcs and rsdt, or rlutcs from rlntcs). 
-        If some variables are still missing after the computations, raises an error.
-
-        Parameters
-        ----------
-        variables
-            The set of variables that are required for the feedback calculations. Defaults to `STD_VARS_LOGQ`.
-        """
-        if not self.ds:
-            raise ValueError('Remapped data not loaded (self.ds is empty)')
-        
-        if "rsntcs" in self.ds.data_vars and "rsutcs" not in self.ds.data_vars:
-            print("Computed rsutcs from rsntcs and rsdt")
-            self.ds["rsutcs"] = self.ds["rsdt"] - self.ds["rsntcs"]
-            del self.ds["rsntcs"]
-
-        if "rlntcs" in self.ds.data_vars and "rlutcs" not in self.ds.data_vars:
-            print("Computed rlutcs from rlntcs")
-            self.ds["rlutcs"] = -self.ds["rlntcs"]
-            del self.ds["rlntcs"]
-
-        if 'alb' in variables: self.check_albedo()
-        if 'hus_log' in variables: self.check_hus_log()
-        if 'wv_vmr' in variables: self.convert_hus_to_vmr()
-        self.compute_net_TOA()
-
-        missing_vars = []
-        for var in variables:
-            if var in self.ds.data_vars:
-                print(f"-> {var} loaded")
+            if 'hus' in self.ds.data_vars:
+                print('Converting hus to wv vmr')
+                self.ds['wv_vmr'] = q_to_ppmv(self.ds['hus'])
+                self.ds['wv_vmr_log'] = da.log(self.ds['wv_vmr'])
+                del self.ds['hus']
             else:
-                print(f"!!! {var} not found !!!")
-                missing_vars.append(var)
+                raise ValueError(' no hus variable in dataset')
 
-        if missing_vars:
-            raise ValueError(
-                f"Dataset missing variables: {missing_vars}"
-            )
 
-        self.variables = variables
+    # def check_vars(self, variables: set[str] | list[str] | tuple[str] = STD_VARS_LOGQ) -> None:
+    #     """
+    #     Checks if all variables needed are loaded. If some are missing, 
+    #     tries to compute them from available variables (e.g., rsutcs from rsntcs and rsdt, or rlutcs from rlntcs). 
+    #     If some variables are still missing after the computations, raises an error.
+
+    #     Parameters
+    #     ----------
+    #     variables
+    #         The set of variables that are required for the feedback calculations. Defaults to `STD_VARS_LOGQ`.
+    #     """
+    #     if not self.ds:
+    #         raise ValueError('Remapped data not loaded (self.ds is empty)')
+        
+    #     if "rsntcs" in self.ds.data_vars and "rsutcs" not in self.ds.data_vars:
+    #         print("Computed rsutcs from rsntcs and rsdt")
+    #         self.ds["rsutcs"] = self.ds["rsdt"] - self.ds["rsntcs"]
+    #         del self.ds["rsntcs"]
+
+    #     if "rlntcs" in self.ds.data_vars and "rlutcs" not in self.ds.data_vars:
+    #         print("Computed rlutcs from rlntcs")
+    #         self.ds["rlutcs"] = -self.ds["rlntcs"]
+    #         del self.ds["rlntcs"]
+
+    #     if 'alb' in variables: self.check_albedo()
+    #     if 'hus_log' in variables: self.check_hus_log()
+    #     if 'wv_vmr' in variables: self.convert_hus_to_vmr()
+    #     self.compute_net_TOA()
+
+    #     missing_vars = []
+    #     for var in variables:
+    #         if var in self.ds.data_vars:
+    #             print(f"-> {var} loaded")
+    #         else:
+    #             print(f"!!! {var} not found !!!")
+    #             missing_vars.append(var)
+
+    #     if missing_vars:
+    #         raise ValueError(
+    #             f"Dataset missing variables: {missing_vars}"
+    #         )
+
+    #     self.variables = variables
     
     def check_time_range(self, time_range: dict[str, Any] | None = None) -> None:
         """
@@ -1400,7 +1409,7 @@ def load_config(config_file: str | Path, variable_mapping_file: str | Path | Non
     return config
 
 
-def preprocess_data(config_file: str | Path = "config_example.yml", config: dict = None, ker: str = "HUANG", raw_variables: set[str] | list[str] | tuple[str] = STD_VARS_NOALB, save_remapped: bool = True, variable_mapping_file: str | Path | None = None, control_file_dict: dict | None = None, exp_file_dict: dict | None = None, wv_method_spectral: str = 'hybrid', exp_name: str | None = None) -> tuple[Experiment, Experiment, Kernel]:
+def preprocess_data(config_file: str | Path = "config_example.yml", config: dict = None, ker: str = "HUANG", raw_variables: set[str] | list[str] | tuple[str] = None, save_remapped: bool = True, variable_mapping_file: str | Path | None = None, control_file_dict: dict | None = None, exp_file_dict: dict | None = None, wv_method_spectral: str = 'hybrid', exp_name: str | None = None) -> tuple[Experiment, Experiment, Kernel]:
     """
     Orchestrates the data preparation sequence before feedback calculation.
 
@@ -1455,12 +1464,16 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
     else:
         chunks_remap = {'time': 120}#, 'plev': 1}
 
-    if kernel.wv_name == 'wv_vmr':
-        variables = STD_VARS_SPECT
-    elif kernel.wv_name == 'hus_log':
-        variables = STD_VARS_LOGQ
-    else:
-        variables = STD_VARS
+    if raw_variables == None:
+        if kernel.wv_name == 'wv_vmr':
+           raw_variables = STD_VARS_SPECT
+           print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "ta", "tas", "ts"')
+        elif kernel.wv_name == 'hus_log':
+            raw_variables = STD_VARS_LOGQ
+            print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "rsut", "rsutcs", "ta", "tas", "ts", "rsds", "rsus" ')
+        else:
+            raw_variables = STD_VARS
+            print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "alb", "rsut", "rsutcs", "ta", "tas", "ts"')
     
     # load picontrol (+ remap)
     print('\n -------> Loading control')
@@ -1468,7 +1481,7 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
 
     control.prepare_input_dataset(target_grid_ds=k)
     control.check_coords() 
-    control.check_vars(variables = variables)
+    #control.check_vars(variables = variables)
     control.vertical_interp(k)
     control.check_time_range(config['time_range_clim'])
     control.check_spatial_range(lat_range=config['lat_range'], lon_range=config['lon_range'])
@@ -1479,7 +1492,7 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
     
     experiment.prepare_input_dataset(target_grid_ds=k)
     experiment.check_coords() 
-    experiment.check_vars(variables = variables)
+    #experiment.check_vars(variables = variables)
     experiment.vertical_interp(k)
     experiment.check_time_range(config['time_range_exp'])
     experiment.check_spatial_range(lat_range=config['lat_range'], lon_range=config['lon_range'])
@@ -2092,6 +2105,36 @@ def month_calc(anom: xr.DataArray, k: xr.DataArray) -> xr.DataArray:
     return coso
 
 
+def check_vars(self, name, wv_name=None):
+    if not self.ds:
+        raise ValueError('Remapped data not loaded (self.ds is empty)')
+    if name == 'planck_surf':
+       if "ts" not in self.ds.data_vars:
+            raise ValueError('ts not present in dataset')
+    if name == 'planck_atmo':
+        if "ts" not in self.ds.data_vars:
+            raise ValueError('ts not present in dataset')
+        if "ta" not in self.ds.data_vars:
+            raise ValueError('ta not present in dataset')
+    if name == 'w-v':
+        if wv_name == 'wv_vmr':
+            self.convert_hus_to_vmr()
+        if wv_name =='hus_log': 
+            self.check_hus_log()
+        if wv_name =='hus':
+            if "hus" not in self.ds.data_vars:
+                raise ValueError('hus not present in dataset')
+    if name == 'cloud':
+        if "rlut" not in self.ds.data_vars:
+            raise ValueError('rlut not present in dataset')
+        if "rlutcs" not in self.ds.data_vars:
+            raise ValueError('rlutcs not present in dataset')
+        if "rsut" not in self.ds.data_vars:
+            raise ValueError('rsut not present in dataset')
+        if "rsutcs" not in self.ds.data_vars:
+            raise ValueError('rsutcs not present in dataset')
+            
+
 ############ RADIATIVE ANOMALY FUNCTIONS #############
 #PLANCK SURFACE
 
@@ -2127,6 +2170,8 @@ def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: st
     - dRt_planck-surf_pattern_{tip}.nc
         Full spatial pattern of the Planck surface anomaly for each condition (clear/cloudy).
     """
+    check_vars(experiment, 'planck_surf')
+
     radiation = dict()
     for tip in ['clr', 'cld']:
         print(f"Processing {tip}")
@@ -2208,6 +2253,8 @@ def Rad_anomaly_planck_atm_lr(experiment: Experiment, kernel: Kernel, cart_out: 
     - dRt_lapse-rate_pattern_{tip}.nc
         Full spatial pattern of the lapse-rate anomaly for each condition (clear/cloudy).
     """
+
+    check_vars(experiment, 'planck_atmo')
     radiation=dict()
     if use_strat_mask:
         mask = mask_strato(experiment.ds['ta'])
@@ -2298,6 +2345,7 @@ def Rad_anomaly_albedo(experiment: Experiment, kernel: Kernel, cart_out: str, sa
     - dRt_albedo_pattern_{tip}.nc
         Full spatial pattern of the albedo anomaly for each condition (clear/cloudy).
     """  
+    experiment.check_albedo()
     radiation=dict()
 
     if kernel.name == "SPECTRAL":
@@ -2362,6 +2410,7 @@ def Rad_anomaly_wv(experiment: Experiment, control: Experiment, kernel: Kernel, 
     - dRt_water-vapor_pattern_{tip}.nc
         Full spatial pattern of the water vapor anomaly for each condition (clear/cloudy).
     """
+    check_vars(experiment, 'w-v', wv_name)
     radiation=dict()
     
     wv_name = kernel.wv_name
@@ -2544,7 +2593,7 @@ def Rad_anomaly_cloud(experiment: Experiment, cart_out: str, output_lw_sw: bool 
     - dRt_cloud_pattern.nc
       Full spatial pattern of the cloud radiative forcing anomaly.
     """
-
+    check_vars(experiment, 'cloud')
     rad_fields = [('net_toa_cs', 'net_toa'), ('rlut', 'rlutcs'), ('rsut', 'rsutcs')]
     names = ['cloud', 'cloud-lw', 'cloud-sw']
     fbnams_all = [dRt_nocloud, dRt_nocloud_lw, dRt_nocloud_sw]
