@@ -3099,3 +3099,268 @@ def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, cont
             stderr.to_netcdf(cart_out + "feedback_error_"+ fbn +"_" + tip + ".nc", format="NETCDF4")
 
     return fb_coef
+
+# INTERNAL FEEDBACK ANALYSIS (ENSO LAGGED REGRESSIONS)
+
+def check_external_index_time_range(index: xr.DataArray, exp_dates: xr.DataArray):
+    
+    index_dates = index.time
+    
+    year = exp_dates[0].dt.year.astype(str)
+    month = exp_dates[0].dt.month.astype(str).str.zfill(2)
+    string_exp_start = year+"-"+month
+    
+    year = exp_dates[-1].dt.year.astype(str)
+    month = exp_dates[-1].dt.month.astype(str).str.zfill(2)
+    string_exp_end = year+"-"+month
+    
+    year = index_dates[0].dt.year.astype(str)
+    month = index_dates[0].dt.month.astype(str).str.zfill(2)
+    string_idx_start = year+"-"+month
+    
+    year = index_dates[-1].dt.year.astype(str)
+    month = index_dates[-1].dt.month.astype(str).str.zfill(2)
+    string_idx_end = year+"-"+month
+    
+    print('Checking time range of external index')
+    if string_idx_start == string_exp_start and string_idx_end == string_exp_end:
+        print('Same time range, nothing to do')
+        index_sliced = index
+    elif string_exp_end <= string_idx_end and string_exp_start >= string_idx_start:
+        print("Slicing index from:", string_exp_start.item(), string_exp_end.item())
+        index_sliced = index.sel(time=slice(string_exp_start, string_exp_end))
+    else:
+            raise ValueError("Error: different time range.")
+    
+    return index_sliced
+
+def load_enso_index(path_to_index: str, dates: xr.DataArray):
+    
+    if Path(path_to_index).suffix == ".nc":
+        enso_index = xr.open_dataarray(path_to_index, decode_times=time_coder)
+    else:
+        raise TypeError('External index file must be netCDF format')
+    
+    index = check_external_index_time_range(enso_index, dates)
+    index = index.assign_coords(time=dates)
+    
+    return index
+
+def lagged_regression_1d(x, y, lag: np.ndarray, bootstrap_error: bool):
+    
+    """
+    Performs n-linear regressions, as specified by the "lag" parameter, 
+    between the radiative anomaly and an external sea surface temperature index. 
+    For each "lag" the radiative anomaly time series is regressed onto the index shifted 
+    forward/backword in time accordingly. 
+    
+    Parameters
+    ----------
+    x
+        sea surface temperature anomaly defined over time.
+    y
+        radiative anomaly defined over time.
+    lag
+        array with the time-lags (months) to switch the sea surface temperature time series.
+    bootstrap_error
+        If True, calculates the standard error and confidence intervals using
+        bootstrapping. If False, returns the standard stats.linregress output and 
+        confidence interval using two-sided inverse Students t-distribution.
+    """
+    m = np.zeros((lag.size))
+    r = np.zeros((lag.size))
+    p = np.zeros((lag.size))
+    ste = np.zeros((lag.size))
+    ci_lo = np.zeros((lag.size))
+    ci_hi = np.zeros((lag.size))
+    
+    x = np.asarray(x)
+    y = np.asarray(y)
+    mask = np.isfinite(x) & np.isfinite(y)
+    x = x[mask] 
+    y = y[mask]
+    
+    for l in range(lag.size):
+        if len(x) < 2:
+            m[l] = np.nan
+            r[l] = np.nan
+            p[l] = np.nan
+            ste[l] = np.nan
+            ci_lo[l] = np.nan
+            ci_hi[l] = np.nan
+        else:
+            xlagged = np.roll(x,lag[l])
+            res = regre_with_err(xlagged, y, bootstrap_error)
+            m[l] = res.slope
+            r[l] = res.rvalue
+            p[l] = res.pvalue
+            ste[l] = res.stderr
+            if bootstrap_error == True:
+                ci_lo[l] = res.ci_low
+                ci_hi[l] = res.ci_high
+            else:
+                ci_hi[l], ci_lo[l] = t_student(xlagged, res.stderr)
+    
+    return m, r, p, ste, ci_lo, ci_hi
+
+def lagged_regressions_vectorized(gtas: xr.DataArray, feedback_data: xr.DataArray, lag: np.ndarray, bootstrap_error: bool) -> xr.DataArray:
+    """
+    Performs the linear lagged regression between radiative anomaly, defined over frequency and time, and 
+    an external sea surface temperature index, defined over time, using `xarray.apply_ufunc` for parallelization.
+    
+    Parameter
+    ---------
+    gtas
+        sea surface temperature index time series.
+    feedback_data
+        spectral radiative anomaly.
+    bootstrap_error
+        If True, calculates the standard error and confidence intervals using
+        bootstrapping. If False, returns the standard stats.linregress output and 
+        confidence interval using two-sided inverse Students t-distribution.
+    Return
+    ------
+    slope, rvalue, pvalue, stderr
+        regression coefficient, R, p-value and standard error of the regression coefficient 
+        defined over frequency and time lags.
+    ci_low, ci_high
+        lower and upper boundary of the confidence interval 
+        defined over frequency and time lags.
+    max_slope, max_lag
+        maximum regression coefficient and corresponding time-lag defined over frequency. 
+    """
+    
+    # Use apply_ufunc for broadcasting regression across all spectral frequencies
+    slope, rvalue, pvalue, stderr, ci_low, ci_high = xr.apply_ufunc(
+        lagged_regression_1d,
+        gtas,
+        feedback_data,
+        input_core_dims=[['time'], ['time']],
+        output_core_dims=[['lag'],['lag'], ['lag'], ['lag'], ['lag'], ['lag']],
+        vectorize=True,
+        dask='parallelized',
+        output_dtypes=[float, float, float, float, float, float],
+        dask_gufunc_kwargs={
+        "output_sizes": {"lag": len(lag)}
+        },
+        kwargs={"lag":lag, "bootstrap_error":bootstrap_error},
+    )
+    
+    for da in (slope, rvalue, pvalue, stderr, ci_low, ci_high):
+        da.coords["lag"] = lag
+    
+    lidx = np.abs(slope).argmax(dim="lag")
+    max_slope = slope.isel(lag=lidx)
+    max_lag = slope["lag"].isel(lag=lidx)
+    
+    return slope, rvalue, pvalue, stderr, ci_low, ci_high, max_slope, max_lag
+
+def t_student(x, slope_stderr: np.ndarray):
+    # Two-sided inverse Students t-distribution
+    # p - probability, df - degrees of freedom
+    tinv = lambda p, df: abs(stats.t.ppf(p/2, df)) 
+    ts = tinv(0.05, len(x)-2)
+    ci_hi = ts*slope_stderr
+    
+    return ci_hi, -ci_hi
+
+def find_max(slope: np.ndarray, lag: np.ndarray):
+    """
+    Find the maximum regression coefficient and corresponding time-lag. 
+    
+    Parameter
+    ---------
+    slope
+        regression coefficients defined over time-lags.
+    lag
+        array with time-lags.
+    
+    Return
+    ------
+    max_slope
+        value of the maximum regression coefficient. 
+    max_lag 
+        month-lag corresponding to the maximum regression coefficient value. 
+    """
+    ymax_abs = np.max(np.abs(slope))
+    xmax= np.where(np.abs(slope)==ymax_abs)
+    max_lag = lag[xmax]
+    max_slope = slope[xmax[0].item()]
+    return max_slope, max_lag
+
+def calc_enso_feedback(path_to_index: str, cart_out: str, names: list[str], time_lag: np.ndarray | None, spectral: bool = True, bootstrap_error: bool = False) -> dict[str, Any]:
+    """
+    Performs the linear lagged regression of the radiative anomaly
+    onto an ENSO SST-based index (e.g. Niño 3.4 index).
+    
+    Parameters
+    ----------
+    path_to_index
+        Path to external index file.
+    cart_out
+        Output directory where results and intermediate files will be saved.
+    names
+        The name of the feedback to compute (e.g., 'albedo', 'cloud', 'water-vapor').
+    time_lag
+        Time lag (in months) to shift the SST-index. Default is from -12 to +12 months.
+    spectral
+        Flag to select between spectral/broadband anomalies. 
+        If True radiative anomalies are treated as spectral.
+    bootstrap_error
+        If True, calculates the standard error and confidence intervals using
+        bootstrapping. If False, returns the standard stats.linregress output and 
+        confidence interval using two-sided inverse Students t-distribution.
+    
+    Returns
+    -------
+    dict
+        A dictionary containing:
+        - "fb_coeffs": xr.DataArray/np.ndarray with slope, r value, p value and slope standard error. 
+        - "fb_ci": xr.DataArray/np.ndarray with lower and higher limits of the confidence interval.
+        - "fb_max": xr.DataArray/np.ndarray with the maximum regression slope and the corresponding time lag. 
+    
+    Notes
+    -----
+    1. Load external SST-based index and radiative anoamly.
+    2. Uses scipy.stats.linregress for broadband radiative anomaly (time), 
+    and uses apply_ufunc for spectral radiative anomaly (freq, time).
+    3. If not provided, the default time lags range from -12 to +12 months.
+    
+    """
+    if time_lag is None:
+        time_lag = np.arange(-12,13)
+    
+    # Load radiative anomalies
+    dRt = open_dRt(cart_out, names)
+    
+    fb_coeffs = dict()
+    confidence_interval = dict()
+    max_coeffs = dict()
+    for it1, tip in enumerate(['clr', 'cld']):
+        for it2, n in enumerate(names):
+            y = dRt[(tip,n)]
+            print(tip,n)
+            if it1 == 0 and it2 == 0: # Load external index only once, at first iteration
+                enso_index = load_enso_index(path_to_index, y.time)
+            if spectral == True:
+                slope, rvalue, pvalue, stderr, ci_low, ci_high, max_slope, max_lag = lagged_regressions_vectorized(enso_index, y, time_lag, bootstrap_error)
+                slope.to_netcdf(cart_out + "/enso_fb/enso_feedback_"+ n +"_" + tip +".nc", format="NETCDF4")
+                stderr.to_netcdf(cart_out + "/enso_fb/enso_feedback_stderr_"+ n +"_" + tip +".nc", format="NETCDF4")
+            elif spectral == False:
+                slope, rvalue, pvalue, stderr, ci_low, ci_high = lagged_regression_1d(enso_index, y, time_lag, bootstrap_error)
+                max_slope, max_lag = find_max(slope, time_lag)
+                data = np.column_stack((slope, stderr))
+                with open(cart_out + "/enso_fb/enso_feedback_" + n + "_" + tip + ".txt", "w") as f:
+                    f.write("SLOPE STD_ERROR\n")
+                    for s, ste in data:
+                        f.write(f"{s:.4f} {ste:.4f}\n")
+            
+            fb_coeffs[(tip, n)] = (slope, rvalue, pvalue, stderr)
+            confidence_interval[(tip,n)] = (ci_low, ci_high)
+            max_coeffs[(tip,n)] = (max_slope, max_lag)
+    
+    return {
+        "fb_coeffs": fb_coeffs,
+        "fb_ci": confidence_interval,
+        "fb_max": max_coeffs,
+        }
