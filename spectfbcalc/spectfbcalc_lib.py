@@ -1497,6 +1497,11 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
     experiment.check_time_range(config['time_range_exp'])
     experiment.check_spatial_range(lat_range=config['lat_range'], lon_range=config['lon_range'])
 
+    #check hus
+    if 'hus' in experiment.ds.data_vars:
+        check_vars(experiment, 'w-v', kernel.wv_name)
+        check_vars(control, 'w-v', kernel.wv_name)
+
     # compute climatology and anomaly
     method = config['anomaly_method']
     print(f"\n -------> Computing {method} and anomalies")
@@ -2117,6 +2122,7 @@ def check_vars(self, name, wv_name=None):
         if "ta" not in self.ds.data_vars:
             raise ValueError('ta not present in dataset')
     if name == 'w-v':
+        print ('wv_name:' + wv_name)
         if wv_name == 'wv_vmr':
             self.convert_hus_to_vmr()
         if wv_name =='hus_log': 
@@ -2410,9 +2416,8 @@ def Rad_anomaly_wv(experiment: Experiment, control: Experiment, kernel: Kernel, 
     - dRt_water-vapor_pattern_{tip}.nc
         Full spatial pattern of the water vapor anomaly for each condition (clear/cloudy).
     """
-    check_vars(experiment, 'w-v', wv_name)
-    radiation=dict()
     
+    radiation=dict()
     wv_name = kernel.wv_name
     anoms_hus=experiment.ds_anom[wv_name]
     if kernel.name == 'SPECTRAL':
