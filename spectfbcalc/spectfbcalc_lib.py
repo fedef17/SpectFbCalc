@@ -798,7 +798,47 @@ class Experiment:
             else:
                 raise ValueError(' no hus variable in dataset')
 
+    
+    def check_vars(self, fb_name: str, wv_name = None) -> None:
+        """
+        Checks if all variables needed are loaded for a specific feedback. If some are missing, 
+        tries to compute them from available variables (e.g., rsutcs from rsntcs and rsdt, or rlutcs from rlntcs). 
+        If some variables are still missing after the computations, raises an error.
+        """
 
+        if not self.ds:
+            raise ValueError('Remapped data not loaded (self.ds is empty)')
+            
+        if fb_name == 'planck-surf':
+           if "ts" not in self.ds.data_vars:
+                raise ValueError('ts not present in dataset')
+        elif fb_name == 'planck-atmo':
+            if "ts" not in self.ds.data_vars:
+                raise ValueError('ts not present in dataset')
+            if "ta" not in self.ds.data_vars:
+                raise ValueError('ta not present in dataset')
+        elif fb_name == 'water-vapor':
+            print ('wv_name:' + wv_name)
+            if wv_name == 'wv_vmr':
+                self.convert_hus_to_vmr()
+            if wv_name =='hus_log': 
+                self.check_hus_log()
+            if wv_name =='hus':
+                if "hus" not in self.ds.data_vars:
+                    raise ValueError('hus not present in dataset')
+        elif fb_name == 'cloud':
+            if "rlut" not in self.ds.data_vars:
+                raise ValueError('rlut not present in dataset')
+            if "rlutcs" not in self.ds.data_vars:
+                raise ValueError('rlutcs not present in dataset')
+            if "rsut" not in self.ds.data_vars:
+                raise ValueError('rsut not present in dataset')
+            if "rsutcs" not in self.ds.data_vars:
+                raise ValueError('rsutcs not present in dataset')
+        else:
+            raise ValueError(f'{fb_name} not recognized')
+
+        
     # def check_vars(self, variables: set[str] | list[str] | tuple[str] = STD_VARS_LOGQ) -> None:
     #     """
     #     Checks if all variables needed are loaded. If some are missing, 
@@ -923,7 +963,7 @@ class Experiment:
         self.ds_clim = compute_running_mean(self.ds, window_years=window_years, time_range = time_range)
 
         if compute:
-            self.ds_clim = self.ds_clim.compute()
+            self.ds_clim.load()
 
 
     def compute_anom_clim(self, control: Experiment) -> None:
@@ -1499,8 +1539,8 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
 
     #check hus
     if 'hus' in experiment.ds.data_vars:
-        check_vars(experiment, 'w-v', kernel.wv_name)
-        check_vars(control, 'w-v', kernel.wv_name)
+        experiment.check_vars('water-vapor', kernel.wv_name)
+        control.check_vars('water-vapor', kernel.wv_name)
 
     # compute climatology and anomaly
     method = config['anomaly_method']
@@ -1761,8 +1801,7 @@ def mask_strato(ta: xr.DataArray, debug = False) -> xr.DataArray:
 
     # Restore original order
     mask = mask.sel(plev = ta.plev)
-
-    #mask = mask.where(mask == 1)
+    mask = mask.where(mask == 1)
 
     # re-adding the last level with all zeros
     # zero_slice = xr.zeros_like(ta.sel(plev=pres[-1])).assign_coords(plev=pres[-1]).expand_dims('plev')
@@ -2108,37 +2147,6 @@ def month_calc(anom: xr.DataArray, k: xr.DataArray) -> xr.DataArray:
     coso = xr.concat(month_calc, dim='time').sortby('time')
 
     return coso
-
-
-def check_vars(self, name, wv_name=None):
-    if not self.ds:
-        raise ValueError('Remapped data not loaded (self.ds is empty)')
-    if name == 'planck_surf':
-       if "ts" not in self.ds.data_vars:
-            raise ValueError('ts not present in dataset')
-    if name == 'planck_atmo':
-        if "ts" not in self.ds.data_vars:
-            raise ValueError('ts not present in dataset')
-        if "ta" not in self.ds.data_vars:
-            raise ValueError('ta not present in dataset')
-    if name == 'w-v':
-        print ('wv_name:' + wv_name)
-        if wv_name == 'wv_vmr':
-            self.convert_hus_to_vmr()
-        if wv_name =='hus_log': 
-            self.check_hus_log()
-        if wv_name =='hus':
-            if "hus" not in self.ds.data_vars:
-                raise ValueError('hus not present in dataset')
-    if name == 'cloud':
-        if "rlut" not in self.ds.data_vars:
-            raise ValueError('rlut not present in dataset')
-        if "rlutcs" not in self.ds.data_vars:
-            raise ValueError('rlutcs not present in dataset')
-        if "rsut" not in self.ds.data_vars:
-            raise ValueError('rsut not present in dataset')
-        if "rsutcs" not in self.ds.data_vars:
-            raise ValueError('rsutcs not present in dataset')
             
 
 ############ RADIATIVE ANOMALY FUNCTIONS #############
@@ -2176,7 +2184,7 @@ def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: st
     - dRt_planck-surf_pattern_{tip}.nc
         Full spatial pattern of the Planck surface anomaly for each condition (clear/cloudy).
     """
-    check_vars(experiment, 'planck_surf')
+    experiment.check_vars('planck-surf')
 
     radiation = dict()
     for tip in ['clr', 'cld']:
@@ -2218,7 +2226,7 @@ def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: st
 
 #PLANK-ATMO AND LAPSE RATE WITH VARYING TROPOPAUSE
 
-def Rad_anomaly_planck_atm_lr(experiment: Experiment, kernel: Kernel, cart_out: str, use_strat_mask: bool = True, save_pattern: bool = False) -> dict[tuple[str, str], xr.DataArray]:
+def Rad_anomaly_planck_atm_lr(experiment: Experiment, kernel: Kernel, cart_out: str, use_strat_mask: bool = True, save_pattern: bool = False, planck_ts_unif = True) -> dict[tuple[str, str], xr.DataArray]:
     """
     Computes atmospheric Planck and lapse-rate radiation anomalies using climate model data and radiative kernels.
 
@@ -2260,7 +2268,8 @@ def Rad_anomaly_planck_atm_lr(experiment: Experiment, kernel: Kernel, cart_out: 
         Full spatial pattern of the lapse-rate anomaly for each condition (clear/cloudy).
     """
 
-    check_vars(experiment, 'planck_atmo')
+    experiment.check_vars('planck-atmo')
+    
     radiation=dict()
     if use_strat_mask:
         mask = mask_strato(experiment.ds['ta'])
@@ -2268,8 +2277,13 @@ def Rad_anomaly_planck_atm_lr(experiment: Experiment, kernel: Kernel, cart_out: 
         # print('check mask -> ', mask.isel(time = slice(0,120)).sel(plev = 237.5).mean().values)
     else:
         ta_anom = experiment.ds_anom['ta']
-    
-    anoms_lr = ta_anom - experiment.ds_anom['ts'] 
+
+    if planck_ts_unif:
+        # Use ts for uniform anomaly
+        anoms_lr = ta_anom - experiment.ds_anom['ts']
+    else:    
+        # Use tas for uniform anomaly
+        anoms_lr = ta_anom - experiment.ds_anom['tas'] 
     anoms_unif = ta_anom - anoms_lr
 
     for tip in ['clr', 'cld']:
@@ -2598,7 +2612,8 @@ def Rad_anomaly_cloud(experiment: Experiment, cart_out: str, output_lw_sw: bool 
     - dRt_cloud_pattern.nc
       Full spatial pattern of the cloud radiative forcing anomaly.
     """
-    check_vars(experiment, 'cloud')
+    experiment.check_vars('cloud')
+    
     rad_fields = [('net_toa_cs', 'net_toa'), ('rlut', 'rlutcs'), ('rsut', 'rsutcs')]
     names = ['cloud', 'cloud-lw', 'cloud-sw']
     fbnams_all = [dRt_nocloud, dRt_nocloud_lw, dRt_nocloud_sw]
@@ -2718,6 +2733,13 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
         else:
             print(f'Reading already computed anomaly from {path}')
             anom_cloud = xr.open_dataset(path) 
+    
+    path = os.path.join(cart_out, "gtas.nc")
+    if not os.path.exists(path) or force_recompute:
+        gtas = ctl.global_mean(experiment.ds_anom['tas'])
+        gtas.to_netcdf(path)
+    else:
+        gtas = xr.open_dataset(path)
 
     return anom_ps, anom_pal, anom_a, anom_wv, anom_cloud 
 
@@ -2730,7 +2752,7 @@ dRt_nocloud_lw=['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor-lw']
 dRt_nocloud_sw=['water-vapor-sw', 'albedo']
 
 
-def open_dRt(cart_out: str, names: list[str] = dRt_all) -> dict:
+def open_dRt(cart_out: str, names: list[str] = dRt_nocloud + dRt_all_cloud) -> dict:
     """
     Create a dict with dRt[(tip, i)] with tip 'clr' or 'cld' (sky condition) 
     and i in names with all radiative anomalies at TOA
@@ -2759,7 +2781,8 @@ def open_dRt_pattern(cart_out: str, names: list[str] = dRt_all) -> dict:
                 dRt[('cld', i)] = xr.open_dataarray(cart_out+"dRt_" + i + "_pattern.nc",  decode_times=time_coder)
     return dRt
 
-def calc_fb(experiment: Experiment, control: Experiment, kernel: Kernel, cart_out: str, use_strat_mask: bool = True, save_pattern: bool = False, num_year_fb: int = 10, fbnams: list[str] = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo'], cloud_fbnams: list[str] = ['cloud', 'cloud-lw', 'cloud-sw']) -> dict[str, Any]:
+
+def calc_fb_from_exp(experiment: Experiment, control: Experiment, kernel: Kernel, cart_out: str, use_strat_mask: bool = True, save_pattern: bool = False, num_year_fb: int = 10, fbnams: list[str] = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo'], cloud_fbnams: list[str] = ['cloud', 'cloud-lw', 'cloud-sw']) -> dict[str, Any]:
     """
     Compute full radiative feedback decomposition and interannual regression
     against global mean surface temperature.
@@ -2800,37 +2823,88 @@ def calc_fb(experiment: Experiment, control: Experiment, kernel: Kernel, cart_ou
         _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False)
         dRt=open_dRt(cart_out, names = dRt_all + dRt_all_cloud)
 
+    #compute gtas
+    gtas = ctl.global_mean(experiment.ds_anom['tas'])#.groupby('time.year').mean('time')
+
+    dRt_patt = None
+    if save_pattern:
+        dRt_patt = {}
+        # Open the dRt pattern
+        for tip in ['clr', 'cld']:
+            for fbn in fbnams:
+                dRt_patt[(tip, fbn)] = xr.open_dataarray(cart_out+"dRt_"+fbn+"_pattern_"+tip +".nc", decode_times=time_coder, chunks = dict(experiment.ds_anom.chunks))
+            
+            if tip == 'cld':
+                for fbn in cloud_fbnams:
+                    dRt_patt[(tip, fbn)] = xr.open_dataarray(cart_out+"dRt_"+fbn+"_pattern.nc", decode_times=time_coder, chunks = dict(experiment.ds_anom.chunks))
+    
+    resu = calc_fb(gtas, dRt, cart_out, dRt_patt=dRt_patt, use_strat_mask=use_strat_mask, save_pattern=save_pattern, num_year_fb=num_year_fb, fbnams=fbnams, cloud_fbnams=cloud_fbnams)
+
+    return resu
+
+
+
+def calc_fb(gtas, dRt, cart_out: str, dRt_patt = None, use_strat_mask: bool = True, save_pattern: bool = False, num_year_fb: int = 10, fbnams: list[str] = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo'], cloud_fbnams: list[str] = ['cloud', 'cloud-lw', 'cloud-sw']) -> dict[str, Any]:
+    """
+    Compute full radiative feedback decomposition and interannual regression
+    against global mean surface temperature.
+
+    Parameters
+    ----------
+    gtas
+        Anomaly of global mean 2m temp.
+    dRt
+        Dictionary containing all radiative anomalies. Keys are in the form (tip, fbn): tip = clr (clear-sky), cld (all-sky); fbn = planck-surf, planck-atmo, ...
+    cart_out
+        Output directory where results and intermediate files will be saved.
+    dRt_patt
+        Dictionary containing all radiative anomalies with spatial dimension. Same keys as for dRt. Needed if save_pattern = True.
+
+        
+    use_strat_mask
+        If True, masks stratospheric temperature changes when computing atmospheric feedbacks.
+    save_pattern
+        If True, computes and saves the full spatial feedback patterns.
+    num_year_fb : int, default 10
+        Number of years per chunk for temporal averaging (default is decadal).
+    fbnams : list of str, optional
+        List of standard clear-sky/all-sky feedback names to compute.
+    cloud_fbnams : list of str, optional
+        List of cloud-specific feedback names to compute.
+    
+    Returns
+    -------
+    dict
+        A dictionary containing:
+        - "fb_coeffs": A dictionary mapping `(sky_condition, feedback_name)` to SciPy linear regression results.
+        - "fb_pattern": A dictionary of spatial feedback patterns (slope and standard error) if `save_pattern` is True.
+    """
+
     fb_coef = dict()
     fb_pattern = dict()
 
-    #compute gtas
-    gtas = ctl.global_mean(experiment.ds_anom['tas']).groupby('time.year').mean('time')
+    gtas = gtas.groupby('time.year').mean('time')
     start_year = int(gtas.year.min()) 
     gtas = gtas.groupby((gtas.year-start_year) // num_year_fb * num_year_fb).mean()
 
     if save_pattern:
+        if dRt_patt is None: raise ValueError('Cannot compute pattern, missing dRt_patt in input to calc_fb.')
         gtas = gtas.chunk({'year': -1})
-
-    if save_pattern:
-        fb_pattern = {}
-    else:
-        fb_pattern = None
 
     print('feedback calculation...')
     for tip in ['clr', 'cld']:
         for fbn in fbnams:
             dRt[(tip, fbn)]=dRt[(tip, fbn)].groupby('time.year').mean('time')
-            start_year = int(dRt[(tip, fbn)].year.min())
+            #start_year = int(dRt[(tip, fbn)].year.min()) # start_year should be the same
             feedback=dRt[(tip, fbn)].groupby((dRt[(tip, fbn)].year-start_year) // num_year_fb * num_year_fb).mean()
 
-            fb_coef[(tip, fbn)] = regre_with_err(gtas, feedback, bootstrap_error=True)
+            fb_coef[(tip, fbn)] = regre_with_err(gtas, feedback, bootstrap_error=False)
 
             if save_pattern:
                 print(f"Computing spatial feedback pattern for {tip}-{fbn}...")
-                # Open the dRt pattern
-                feedbacks_pattern = xr.open_dataarray(cart_out+"dRt_"+fbn+"_pattern_"+tip +".nc", decode_times=time_coder) 
+                feedbacks_pattern = dRt_patt[(tip, fbn)]
                 feedbacks_pattern = feedbacks_pattern.groupby('time.year').mean('time')
-                start_year = int(feedbacks_pattern.year.min())
+                # start_year = int(feedbacks_pattern.year.min())
                 feedbacks_pattern_dec = feedbacks_pattern.groupby((feedbacks_pattern.year - start_year) // num_year_fb * num_year_fb).mean('year')
                 feedbacks_pattern_dec = feedbacks_pattern_dec.chunk({'year': -1})
                 
@@ -2842,17 +2916,17 @@ def calc_fb(experiment: Experiment, control: Experiment, kernel: Kernel, cart_ou
 
     for fbn in cloud_fbnams:
         dRt[('cld', fbn)]=dRt[('cld', fbn)].groupby('time.year').mean('time')
-        start_year = int(dRt[('cld', fbn)].year.min())
+        # start_year = int(dRt[('cld', fbn)].year.min())
         feedback=dRt[('cld', fbn)].groupby((dRt[('cld', fbn)].year-start_year) // num_year_fb * num_year_fb).mean()
         
-        fb_coef[('cld', fbn)] = regre_with_err(gtas, feedback, bootstrap_error=True)
+        fb_coef[('cld', fbn)] = regre_with_err(gtas, feedback, bootstrap_error=False)
 
         if save_pattern:
             print(f"Computing spatial feedback pattern for {tip}-{fbn}...")
             # Open the dRt pattern
-            feedbacks_pattern = xr.open_dataarray(cart_out+"dRt_"+fbn+"_pattern.nc", decode_times=time_coder) 
+            feedbacks_pattern = dRt_patt[(tip, fbn)]
             feedbacks_pattern = feedbacks_pattern.groupby('time.year').mean('time')
-            start_year = int(feedbacks_pattern.year.min())
+            # start_year = int(feedbacks_pattern.year.min())
             feedbacks_pattern_dec = feedbacks_pattern.groupby((feedbacks_pattern.year - start_year) // num_year_fb * num_year_fb).mean('year')
             feedbacks_pattern_dec = feedbacks_pattern_dec.chunk({'year': -1})
             
@@ -2866,6 +2940,7 @@ def calc_fb(experiment: Experiment, control: Experiment, kernel: Kernel, cart_ou
         "fb_coeffs": fb_coef,
         "fb_pattern": fb_pattern if save_pattern else None,
     }
+
 
 def regre_with_err(gtas: np.ndarray, feedback: np.ndarray, bootstrap_error: bool = True) -> Union[Any, SimpleNamespace]:
     """
@@ -2993,7 +3068,7 @@ def calc_fb_interannual(experiment: Experiment, control: Experiment, kernel: Ker
             dRt[(tip, fbn)]=dRt[(tip, fbn)].groupby('time.year').mean('time')
             inter=calc_inter(dRt[(tip, fbn)], running_years)
 
-            fb_coef[(tip, fbn)] = regre_with_err(temp, inter, bootstrap_error=True)
+            fb_coef[(tip, fbn)] = regre_with_err(temp, inter, bootstrap_error=False)
 
             if save_pattern:
                 print(f"Computing spatial feedback pattern for {tip}-{fbn}...")
@@ -3015,7 +3090,7 @@ def calc_fb_interannual(experiment: Experiment, control: Experiment, kernel: Ker
         dRt[('cld', fbn)]=dRt[('cld', fbn)].groupby('time.year').mean('time')
         inter=calc_inter(dRt[('cld', fbn)], running_years)
         
-        fb_coef[('cld', fbn)] = regre_with_err(temp, inter, bootstrap_error=True)
+        fb_coef[('cld', fbn)] = regre_with_err(temp, inter, bootstrap_error=False)
         
         if save_pattern:
             print(f"Computing spatial feedback pattern for {tip}-{fbn}...")
@@ -3127,14 +3202,14 @@ def calc_single_feedback(name: str, experiment: Experiment, kernel: Kernel, cart
             start_year = int(feedbacks.year.min())
             feedback=feedbacks.groupby((feedbacks.year-start_year) // num_year_fb * num_year_fb).mean()
 
-            fb[(tip, name)] = regre_with_err(gtas, feedback, bootstrap_error=True)
+            fb[(tip, name)] = regre_with_err(gtas, feedback, bootstrap_error=False)
     else:
         feedbacks=xr.open_dataarray(cart_out+"dRt_" +name+"_global.nc",  decode_times=time_coder)
         feedbacks=feedbacks.groupby('time.year').mean('time')
         start_year = int(feedbacks.year.min())
         feedback=feedbacks.groupby((feedbacks.year-start_year) // num_year_fb * num_year_fb).mean()
 
-        fb = regre_with_err(gtas, feedback, bootstrap_error=True)
+        fb = regre_with_err(gtas, feedback, bootstrap_error=False)
 
         if save_pattern:
             print(f"Computing spatial feedback pattern for {tip}-{name}...")
