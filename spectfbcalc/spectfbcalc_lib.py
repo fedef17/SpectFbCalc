@@ -798,7 +798,47 @@ class Experiment:
             else:
                 raise ValueError(' no hus variable in dataset')
 
+    
+    def check_vars(self, fb_name: str, wv_name = None) -> None:
+        """
+        Checks if all variables needed are loaded for a specific feedback. If some are missing, 
+        tries to compute them from available variables (e.g., rsutcs from rsntcs and rsdt, or rlutcs from rlntcs). 
+        If some variables are still missing after the computations, raises an error.
+        """
 
+        if not self.ds:
+            raise ValueError('Remapped data not loaded (self.ds is empty)')
+            
+        if fb_name == 'planck-surf':
+           if "ts" not in self.ds.data_vars:
+                raise ValueError('ts not present in dataset')
+        elif fb_name == 'planck-atmo':
+            if "ts" not in self.ds.data_vars:
+                raise ValueError('ts not present in dataset')
+            if "ta" not in self.ds.data_vars:
+                raise ValueError('ta not present in dataset')
+        elif fb_name == 'water-vapor':
+            print ('wv_name:' + wv_name)
+            if wv_name == 'wv_vmr':
+                self.convert_hus_to_vmr()
+            if wv_name =='hus_log': 
+                self.check_hus_log()
+            if wv_name =='hus':
+                if "hus" not in self.ds.data_vars:
+                    raise ValueError('hus not present in dataset')
+        elif fb_name == 'cloud':
+            if "rlut" not in self.ds.data_vars:
+                raise ValueError('rlut not present in dataset')
+            if "rlutcs" not in self.ds.data_vars:
+                raise ValueError('rlutcs not present in dataset')
+            if "rsut" not in self.ds.data_vars:
+                raise ValueError('rsut not present in dataset')
+            if "rsutcs" not in self.ds.data_vars:
+                raise ValueError('rsutcs not present in dataset')
+        else:
+            raise ValueError(f'{fb_name} not recognized')
+
+        
     # def check_vars(self, variables: set[str] | list[str] | tuple[str] = STD_VARS_LOGQ) -> None:
     #     """
     #     Checks if all variables needed are loaded. If some are missing, 
@@ -1499,8 +1539,8 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
 
     #check hus
     if 'hus' in experiment.ds.data_vars:
-        check_vars(experiment, 'w-v', kernel.wv_name)
-        check_vars(control, 'w-v', kernel.wv_name)
+        experiment.check_vars('water-vapor', kernel.wv_name)
+        control.check_vars('water-vapor', kernel.wv_name)
 
     # compute climatology and anomaly
     method = config['anomaly_method']
@@ -2107,37 +2147,6 @@ def month_calc(anom: xr.DataArray, k: xr.DataArray) -> xr.DataArray:
     coso = xr.concat(month_calc, dim='time').sortby('time')
 
     return coso
-
-
-def check_vars(self, name, wv_name=None):
-    if not self.ds:
-        raise ValueError('Remapped data not loaded (self.ds is empty)')
-    if name == 'planck_surf':
-       if "ts" not in self.ds.data_vars:
-            raise ValueError('ts not present in dataset')
-    if name == 'planck_atmo':
-        if "ts" not in self.ds.data_vars:
-            raise ValueError('ts not present in dataset')
-        if "ta" not in self.ds.data_vars:
-            raise ValueError('ta not present in dataset')
-    if name == 'w-v':
-        print ('wv_name:' + wv_name)
-        if wv_name == 'wv_vmr':
-            self.convert_hus_to_vmr()
-        if wv_name =='hus_log': 
-            self.check_hus_log()
-        if wv_name =='hus':
-            if "hus" not in self.ds.data_vars:
-                raise ValueError('hus not present in dataset')
-    if name == 'cloud':
-        if "rlut" not in self.ds.data_vars:
-            raise ValueError('rlut not present in dataset')
-        if "rlutcs" not in self.ds.data_vars:
-            raise ValueError('rlutcs not present in dataset')
-        if "rsut" not in self.ds.data_vars:
-            raise ValueError('rsut not present in dataset')
-        if "rsutcs" not in self.ds.data_vars:
-            raise ValueError('rsutcs not present in dataset')
             
 
 ############ RADIATIVE ANOMALY FUNCTIONS #############
@@ -2175,7 +2184,7 @@ def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: st
     - dRt_planck-surf_pattern_{tip}.nc
         Full spatial pattern of the Planck surface anomaly for each condition (clear/cloudy).
     """
-    check_vars(experiment, 'planck_surf')
+    experiment.check_vars('planck-surf')
 
     radiation = dict()
     for tip in ['clr', 'cld']:
@@ -2259,7 +2268,8 @@ def Rad_anomaly_planck_atm_lr(experiment: Experiment, kernel: Kernel, cart_out: 
         Full spatial pattern of the lapse-rate anomaly for each condition (clear/cloudy).
     """
 
-    check_vars(experiment, 'planck_atmo')
+    experiment.check_vars('planck-atmo')
+    
     radiation=dict()
     if use_strat_mask:
         mask = mask_strato(experiment.ds['ta'])
@@ -2602,7 +2612,8 @@ def Rad_anomaly_cloud(experiment: Experiment, cart_out: str, output_lw_sw: bool 
     - dRt_cloud_pattern.nc
       Full spatial pattern of the cloud radiative forcing anomaly.
     """
-    check_vars(experiment, 'cloud')
+    experiment.check_vars('cloud')
+    
     rad_fields = [('net_toa_cs', 'net_toa'), ('rlut', 'rlutcs'), ('rsut', 'rsutcs')]
     names = ['cloud', 'cloud-lw', 'cloud-sw']
     fbnams_all = [dRt_nocloud, dRt_nocloud_lw, dRt_nocloud_sw]
