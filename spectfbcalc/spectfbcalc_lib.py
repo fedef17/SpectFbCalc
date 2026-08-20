@@ -1508,12 +1508,9 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
         if kernel.wv_name == 'wv_vmr':
            raw_variables = STD_VARS_SPECT
            print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "ta", "tas", "ts"')
-        elif kernel.wv_name == 'hus_log':
-            raw_variables = STD_VARS_LOGQ
-            print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "rsut", "rsutcs", "ta", "tas", "ts", "rsds", "rsus" ')
         else:
-            raw_variables = STD_VARS
-            print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "alb", "rsut", "rsutcs", "ta", "tas", "ts"')
+            raw_variables = STD_VARS_NOALB
+            print ('no variable given. Using: "hus", "rlut", "rsdt", "rlutcs", "rsut", "rsutcs", "ta", "tas", "ts", "rsds", "rsus"')
     
     # load picontrol (+ remap)
     print('\n -------> Loading control')
@@ -1541,6 +1538,14 @@ def preprocess_data(config_file: str | Path = "config_example.yml", config: dict
     if 'hus' in experiment.ds.data_vars:
         experiment.check_vars('water-vapor', kernel.wv_name)
         control.check_vars('water-vapor', kernel.wv_name)
+    if ('alb' in experiment.ds.data_vars) or ('rsus' in experiment.ds.data_vars and 'rsds' in experiment.ds.data_vars):
+        experiment.check_albedo()
+        control.check_albedo()
+    if 'rsdt' in experiment.ds.data_vars and 'rlut' in experiment.ds.data_vars and 'rsut' in experiment.ds.data_vars:
+        experiment.compute_net_TOA()
+        control.compute_net_TOA()
+
+
 
     # compute climatology and anomaly
     method = config['anomaly_method']
@@ -2365,7 +2370,7 @@ def Rad_anomaly_albedo(experiment: Experiment, kernel: Kernel, cart_out: str, sa
     - dRt_albedo_pattern_{tip}.nc
         Full spatial pattern of the albedo anomaly for each condition (clear/cloudy).
     """  
-    experiment.check_albedo()
+    #experiment.check_albedo()
     radiation=dict()
 
     if kernel.name == "SPECTRAL":
