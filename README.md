@@ -18,3 +18,10 @@ git clone [https://github.com/fedef17/SpectFbCalc/](https://github.com/fedef17/S
 cd SpectFbCalc
 bash install.sh
 ```
+
+## Quickstart 
+To see SpectFbCalc in action rapidly, we provide a Jupyter Notebook with sample low-resolution data. 
+
+1. Clone the repository as shown above.
+2. Launch Jupyter: `jupyter notebook`
+3. Open `template_spectfbcalc.ipynb` and run the cells. 
