@@ -1,18 +1,18 @@
 kernels:
     ERA5:
-      path_input: "/path/to/kernels/Huang_ERA5/"
+      path_input: "./kernels/Huang_ERA5/"
       filename_template: "ERA5_kernel_{}_TOA.nc"
     HUANG:
-      path_input: "/path/to/kernels/Huang/toa/"
+      path_input: "./kernels/Huang/toa/"
       filename_template: "RRTMG_{}_toa_{}_highR.nc"
     SPECTRAL:
-      path_input: "/path/to/kernels/spectral/toa/"
+      path_input: "./kernels/spectral/toa/"
    
 file_paths:
-   reference_dataset: "/path/to/reference_data/"
-   experiment_dataset: "/path/to/experiment_data/"
+   reference_dataset: "./sample_data/reference_data/"
+   experiment_dataset: "./sample_data/experiment_data/"
    pressure_data: "" #to specify if you have ps values in a different file and not in an array
-   output: "/path/to/output/"
+   output: "./output/"
 
 control_type: 'PI'
 exp_type: '4x'
