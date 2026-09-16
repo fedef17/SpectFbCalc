@@ -2512,7 +2512,7 @@ def Rad_anomaly_wv(experiment: Experiment, control: Experiment, kernel: Kernel, 
                 print(f'Computed log part: {dRt_glob_lw_log.min()} - {dRt_glob_lw_log.max()}')
             elif kernel.wv_method == 'hybrid':
                 freq = dRt_lw_log['freq']
-                mask_log = ((freq >= 100.) & (freq <= 560.)) | ((freq >= 1350.) & (freq <= 1850.))
+                mask_log = ((freq >= 100.) & (freq <= 650.)) | ((freq >= 1250.) & (freq <= 1850.))
                 mask_lin = ~mask_log
 
                 dRt_lw_log_sel = dRt_lw_log.where(mask_log, drop=True).sortby('freq')
