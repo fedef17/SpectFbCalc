@@ -114,7 +114,7 @@ def plot_fb_pattern(slope, stderr, title, output_folder, filename_prefix="fb_pat
 
     def plot_field(field, cmap, label, fname):
         fig, ax = plt.subplots(figsize=(10, 4.5),
-                               subplot_kw={"projection": ccrs.PlateCarree()})
+                               subplot_kw={"projection": ccrs.PlateCarree(central_longitude=180)})
         # just plot normally, without add_label
         im = field.plot(
             ax=ax,
@@ -146,7 +146,7 @@ def plot_fb_pattern(slope, stderr, title, output_folder, filename_prefix="fb_pat
     plot_field(slope, "RdBu_r", "W/m²/K", f"{filename_prefix}_slope.png")
     plot_field(stderr, "viridis", "W/m²/K", f"{filename_prefix}_stderr.png")
 
-def save_all_fb_patterns_to_pdf(ds: xr.Dataset, output_folder: str, pdf_name: str = "all_fb_patterns.pdf", components: list = None, skies: list = None, plot_function=None, run_label: str = "exp"):
+def save_all_fb_patterns_to_pdf(ds: xr.Dataset, output_folder: str, pdf_name: str = "all_fb_patterns.pdf", components: list = None, skies: list = None, plot_function=plot_fb_pattern, run_label: str = "exp"):
     """
     Generate and save feedback pattern maps for multiple components and sky conditions.
 
@@ -218,6 +218,7 @@ def save_all_fb_patterns_to_pdf(ds: xr.Dataset, output_folder: str, pdf_name: st
                     )
                 except Exception as e:
                     print(f"Error for {comp} - {sky}: {e}")
+                    raise e
 
     print(f"Combined feedback PDF saved to: {pdf_path}")
 
