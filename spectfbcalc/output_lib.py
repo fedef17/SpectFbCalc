@@ -8,6 +8,7 @@ import glob
 import fnmatch
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from climtools import climtools_lib as ctl
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -114,7 +115,7 @@ def plot_fb_pattern(slope, stderr, title, output_folder, filename_prefix="fb_pat
 
     def plot_field(field, cmap, label, fname):
         fig, ax = plt.subplots(figsize=(10, 4.5),
-                               subplot_kw={"projection": ccrs.PlateCarree()})
+                               subplot_kw={"projection": ccrs.PlateCarree(central_longitude=180)})
         # just plot normally, without add_label
         im = field.plot(
             ax=ax,
@@ -146,7 +147,7 @@ def plot_fb_pattern(slope, stderr, title, output_folder, filename_prefix="fb_pat
     plot_field(slope, "RdBu_r", "W/m²/K", f"{filename_prefix}_slope.png")
     plot_field(stderr, "viridis", "W/m²/K", f"{filename_prefix}_stderr.png")
 
-def save_all_fb_patterns_to_pdf(ds: xr.Dataset, output_folder: str, pdf_name: str = "all_fb_patterns.pdf", components: list = None, skies: list = None, plot_function=None, run_label: str = "exp"):
+def save_all_fb_patterns_to_pdf(ds: xr.Dataset, output_folder: str, pdf_name: str = "all_fb_patterns.pdf", components: list = None, skies: list = None, plot_function=plot_fb_pattern, run_label: str = "exp"):
     """
     Generate and save feedback pattern maps for multiple components and sky conditions.
 
@@ -218,11 +219,12 @@ def save_all_fb_patterns_to_pdf(ds: xr.Dataset, output_folder: str, pdf_name: st
                     )
                 except Exception as e:
                     print(f"Error for {comp} - {sky}: {e}")
+                    raise e
 
     print(f"Combined feedback PDF saved to: {pdf_path}")
 
 # -------- Gregory plot -----------
-def plot_single_feedback_file(feedback_file, sim_label="exp1", save_path="feedback_summary.png"):
+def plot_feedback_slope(feedback_file, sim_label="exp1", save_path="feedback_summary.png"):
     """
     Parse a feedback summary file and plot slopes with 95% CI.
 
@@ -433,179 +435,94 @@ def plot_dRt_fb_all_params(base_folder, xlabel, ylabel, title, feedback_file, ou
 
 
 # --------- Time series ------------
-def plot_toa_anomaly(base_folder,param,dRt_folder,title,model_type="ece3",sky="clr",output_file=None,):
+def plot_toa_anomaly(experiment, dRt_dict, title, sky="clr", output_file=None):
     """
     Plot Net TOA anomaly (simulation - control climatology) alongside dRt component time series.
 
     Parameters
     ----------
-    base_folder : str
-        Base path containing the simulation and control datasets.
-    param : str
-        Parameter identifier (e.g., 'pilf' for ECE3 or 's001' for ECE4).
-    dRt_folder : str
-        Folder containing dRt component files (per-year time series).
+    experiment : Experiment
+        The experiment object containing the computed anomalies (ds_anom).
+    dRt_dict : dict
+        Dictionary of radiative anomalies, typically loaded via open_dRt() 
+        or returned by calc_anoms(). Keys must be (sky, component).
     title : str
-        Title for the plot (function appends '(CLR sky)' or '(CLD sky)').
-    model_type : {'ece3','ece4'}
-        Model family to select IO conventions and variables.
-    sky : {'clr','cld'}
-        Sky condition for dRt files.
+        Title for the plot.
+    sky : {'clr', 'cld'}
+        Sky condition to plot.
     output_file : str, optional
-        If provided, save figure to this path, else show it.
+        Path to save the figure. If None, plt.show() is called.
     """
 
-    # ---------- helpers ----------
-    def _guess_names(da):
-        # best-effort name guessing for coordinates/dims
-        lat = next((n for n in ["lat", "latitude", "nav_lat", "y"] if n in da.coords or n in da.dims), None)
-        lon = next((n for n in ["lon", "longitude", "nav_lon", "x"] if n in da.coords or n in da.dims), None)
-        time = next((n for n in ["year", "time", "time_counter"] if n in da.coords or n in da.dims), None)
-        return lat, lon, time
+    var_toa = 'net_toa_cs' if sky == 'clr' else 'net_toa'
+    if var_toa not in experiment.ds_anom:
+        raise KeyError(f"Variable {var_toa} not found in ds_anom. Have you executed compute_net_TOA() before compute_anomalies()?")
+        
+    # Fai la media globale e poi la media annuale
+    toa_anom = experiment.ds_anom[var_toa]
+    toa_anom_gm = ctl.global_mean(toa_anom)
+    
+    time_coord = 'time' if 'time' in toa_anom_gm.coords else 'time_counter'
+    toa_annual = toa_anom_gm.groupby(f'{time_coord}.year').mean(time_coord)
+    
+    years = toa_annual['year'].values
+    vals_toa = toa_annual.values
 
-    def _global_mean(da):
-        """Area-weighted global mean over spatial dims (cos(lat) weights)."""
-        lat, lon, time = _guess_names(da)
-        # If we have lat/lon, do weighted mean
-        if lat is not None and lon is not None:
-            # weights need to be subset of da dims; 1D weights over lat are fine
-            weights = np.cos(np.deg2rad(xr.where(np.isfinite(da[lat]), da[lat], 0.0)))
-            gm = da.weighted(weights).mean(dim=[lat, lon])
-        else:
-            # Fallback: mean over all non-time dims
-            spatial_dims = [d for d in da.dims if d not in {"time", "time_counter", "year"}]
-            gm = da.mean(dim=spatial_dims)
-        return gm
-
-    def _get_time(da):
-        lat, lon, time = _guess_names(da)
-        if time is None:
-            # fallback: take first dim as "time-like"
-            time = da.dims[0]
-        return time
-
-    # ---------- load sim/control & compute anomaly ----------
-    if model_type.lower() == "ece3":
-        # tsrc + ttrc
-        sim_path_tsrc  = os.path.join(base_folder, "pi", "t_sim", param, f"{param}_*_tsrc.nc")
-        sim_path_ttrc  = os.path.join(base_folder, "pi", "t_sim", param, f"{param}_*_ttrc.nc")
-        ctrl_path_tsrc = os.path.join(base_folder, "pi", "std_sim", "tpa1", "tpa1_*_tsrc.nc")
-        ctrl_path_ttrc = os.path.join(base_folder, "pi", "std_sim", "tpa1", "tpa1_*_ttrc.nc")
-
-        ds_sim_tsrc  = xr.open_mfdataset(sim_path_tsrc, combine="by_coords")
-        ds_sim_ttrc  = xr.open_mfdataset(sim_path_ttrc, combine="by_coords")
-        ds_ctrl_tsrc = xr.open_mfdataset(ctrl_path_tsrc, combine="by_coords")
-        ds_ctrl_ttrc = xr.open_mfdataset(ctrl_path_ttrc, combine="by_coords")
-
-        tnrc_sim  = ds_sim_tsrc["tsrc"] + ds_sim_ttrc["ttrc"]
-        tnrc_ctrl = ds_ctrl_tsrc["tsrc"] + ds_ctrl_ttrc["ttrc"]
-
-        time_name = _get_time(tnrc_sim)  # should be 'time'
-        tnr_sim_annual  = tnrc_sim.groupby(f"{time_name}.year").mean(dim=time_name)
-        tnr_ctrl_annual = tnrc_ctrl.groupby(f"{time_name}.year").mean(dim=time_name)
-        # Force integer year coordinates
-        tnr_sim_annual = tnr_sim_annual.assign_coords(year=tnr_sim_annual["year"].astype(int))
-        tnr_ctrl_annual = tnr_ctrl_annual.assign_coords(year=tnr_ctrl_annual["year"].astype(int))
-
-    elif model_type.lower() == "ece4":
-        # rsntcs + rlntcs
-        sim_path  = os.path.join(base_folder, "t_sim", param, "oifs", "regridded", f"{param}_*_1m_*.nc")
-        ctrl_path = os.path.join(base_folder, "std_sim", "oifs", "s000_*_1m_*.nc")
-
-        ds_sim  = xr.open_mfdataset(sim_path, combine="by_coords")
-        ds_ctrl = xr.open_mfdataset(ctrl_path, combine="by_coords")
-
-        tnrc_sim  = ds_sim["rsntcs"] + ds_sim["rlntcs"]
-        tnrc_ctrl = ds_ctrl["rsntcs"] + ds_ctrl["rlntcs"]
-
-        time_name = _get_time(tnrc_sim)  # should be 'time_counter'
-        tnr_sim_annual  = tnrc_sim.groupby(f"{time_name}.year").mean(dim=time_name)
-        tnr_ctrl_annual = tnrc_ctrl.groupby(f"{time_name}.year").mean(dim=time_name)
-        tnr_sim_annual  = tnrc_sim.groupby(f"{time_name}.year").mean(dim=time_name)
-        tnr_ctrl_annual = tnrc_ctrl.groupby(f"{time_name}.year").mean(dim=time_name)
-
-    else:
-        raise ValueError("model_type must be 'ece3' or 'ece4'.")
-
-    # now (year, lat, lon) -> global mean -> (year,)
-    climatology     = _global_mean(tnr_ctrl_annual).mean(dim="year")
-    tnr_anomaly_gm  = _global_mean(tnr_sim_annual) - climatology  # (year,)
-    years_anom      = tnr_anomaly_gm["year"].values
-    vals_anom       = tnr_anomaly_gm.values
-
-    # ---------- dRt components (per sky) ----------
-    if model_type.lower() == "ece3":
-        # albedo exists for clr; may not exist for cld depending on your pipeline → we’ll skip missing files
-        default_files = [
-            f"dRt_albedo_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_lapse-rate_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_planck-atmo_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_planck-surf_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_water-vapor_global_{sky}_climatology-HUANGkernels.nc",
-        ]
-        default_labels = ["Albedo", "Lapse Rate", "Planck Atmos", "Planck Surface", "Water Vapor"]
-    else:  # ece4
-        default_files = [
-            f"dRt_lapse-rate_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_planck-atmo_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_planck-surf_global_{sky}_climatology-HUANGkernels.nc",
-            f"dRt_water-vapor_global_{sky}_climatology-HUANGkernels.nc",
-        ]
-        default_labels = ["Lapse Rate", "Planck Atmos", "Planck Surface", "Water Vapor"]
+    expected_comps = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo']
+    if sky == 'cld':
+        expected_comps.append('cloud')
 
     dRt_components = []
-    comp_labels    = []
-    comp_times     = None
+    comp_labels = []
 
-    for fname, lab in zip(default_files, default_labels):
-        path = os.path.join(dRt_folder, fname)
-        if not os.path.exists(path):
-            # quiet skip if missing
-            # print(f"Missing {path}, skipping.")
-            continue
-        ds = xr.open_dataset(path)
-        da = ds["__xarray_dataarray_variable__"]
-        # ensure we have a time-like coord (prefer 'year')
-        tname = "year" if "year" in da.coords or "year" in da.dims else _get_time(da)
-        da = da.assign_coords({tname: np.round(da[tname].values).astype(int)})
-        if comp_times is None:
-            comp_times = da[tname].values
-        dRt_components.append(da)
-        comp_labels.append(lab)
-
-    if len(dRt_components) == 0:
-        raise FileNotFoundError(f"No dRt component files found in {dRt_folder} for sky='{sky}'.")
-
-    # align and sum
+    for comp in expected_comps:
+        if (sky, comp) in dRt_dict:
+            da = dRt_dict[(sky, comp)]
+            if time_coord in da.coords or time_coord in da.dims:
+                da = da.groupby(f'{time_coord}.year').mean(time_coord)
+            
+            dRt_components.append(da)
+            comp_labels.append(comp.replace('-', ' ').capitalize())
+            
+    if not dRt_components:
+        raise ValueError(f"No dRt components found in the dictionary for sky='{sky}'")
+    
     aligned = xr.align(*dRt_components, join="inner")
     dRt_sum = sum(aligned)
-    comp_times = aligned[0]["year"].values.astype(int) if "year" in aligned[0].coords else aligned[0][_get_time(aligned[0])].values.astype(int)
 
-    # ---------- plotting ----------
-    plt.figure(figsize=(12,5))
-    plt.plot(years_anom.astype(int), vals_anom, color="black", marker="o", linestyle="-", label="Net TOA Anomaly")
+    plt.figure(figsize=(12, 5))
+    
+    plt.plot(years.astype(int), vals_toa, color="black", marker="o", linestyle="-", label="Net TOA Anomaly (Model)")
 
-    color_cycle = ["tab:blue", "tab:green", "tab:purple", "tab:orange", "tab:cyan", "tab:pink", "tab:brown"]
-    for i, (comp, lab) in enumerate(zip(aligned, comp_labels)):
-        tname = "year" if "year" in comp.coords or "year" in comp.dims else _get_time(comp)
-        plt.plot(np.round(comp[tname].values).astype(int), comp.values, marker="s", linestyle="--",
-                 label=lab, color=color_cycle[i % len(color_cycle)])
+    color_cycle = ["tab:blue", "tab:green", "tab:purple", "tab:orange", "tab:cyan", "tab:brown"]
+    for i, (comp_da, lab) in enumerate(zip(aligned, comp_labels)):
+        plt.plot(
+            comp_da['year'].values.astype(int), 
+            comp_da.values, 
+            marker="s", linestyle="--", alpha=0.7,
+            label=lab, color=color_cycle[i % len(color_cycle)]
+        )
 
-    tname_sum = "year" if "year" in dRt_sum.coords or "year" in dRt_sum.dims else _get_time(dRt_sum)
-    plt.plot(np.round(dRt_sum[tname_sum].values).astype(int), dRt_sum.values, color="red", linestyle="-", linewidth=2,
-             label="Sum of dRt Components")
+    plt.plot(
+        dRt_sum['year'].values.astype(int), 
+        dRt_sum.values, 
+        color="red", linestyle="-", linewidth=2.5,
+        label="Sum of dRt Components (Kernels)"
+    )
 
     plt.xlabel("Year")
-    plt.ylabel("W/m²")
-    plt.title(f"{title} ({sky.upper()} sky)", fontsize=14)
-    plt.xticks(years_anom, [str(y) for y in years_anom])
+    plt.ylabel("Radiative Anomaly [W/m²]")
+    plt.title(f"{title} ({sky.upper()} sky)", fontsize=14, fontweight='bold')
+    plt.xticks(years, [str(int(y)) for y in years])
     plt.axhline(0, color="gray", linestyle="--", linewidth=1)
-    plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+    
+    plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5))
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
 
     if output_file:
         plt.savefig(output_file, dpi=300, bbox_inches="tight")
-        print(f"Saved: {output_file}")
+        print(f"Plot saved: {output_file}")
     else:
         plt.show()
+    plt.close()

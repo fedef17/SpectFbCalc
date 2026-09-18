@@ -20,8 +20,23 @@ bash install.sh
 ```
 
 ## Quickstart 
+### Downloading Kernels and Data
+Radiative kernels (spectral and broadband) are hosted separately on Zenodo
+and Mendeley Data and are not included in the repository. Download them with:
+```bash
+cd spectfbcalc/
+nohup python download_data.py > download_data.log 2>&1 &
+disown
+```
+This runs in the background. Track progress with:
+```bash
+tail -f download_data.log
+```
+**Note**: If interrupted, simply re-run the same command: already-downloaded files are skipped automatically.
+
+### Try the tool
 To see SpectFbCalc in action rapidly, we provide a Jupyter Notebook with sample low-resolution data. 
 
-1. Clone the repository as shown above.
+1. Clone the repository and download the kernels as shown above.
 2. Launch Jupyter: `jupyter notebook`
 3. Open `template_spectfbcalc.ipynb` and run the cells. 

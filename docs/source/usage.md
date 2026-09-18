@@ -10,7 +10,8 @@ conda activate spectfbcalc
 ```bash
 jupyter notebook
 ```
-3. Navigate to **`test_spectfbcalc.ipynb`** and execute the cells to see an example usage.
+3. Navigate to **`template_spectfbcalc.ipynb`** and execute the cells to see an example usage.
+**Important**: see instruction to download the dataset in the notebook or in the README.md.
 
 ## Initial Setup in the Notebook
 Before running the core functions for calculating anomalies and feedbacks, create a **`config.yaml/`** file in the **`spectfbcalc/`** folder by copying **`config_example.yaml/`** and modifying paths and configurations based on your purpose: 

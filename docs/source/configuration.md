@@ -1,8 +1,7 @@
 # Configuration File (config.yaml)
 The software is designed to handle data from CMIP6/CMIP7 models. It supports three kernel types:
 1. **Huang** kernels [^1]
-2. **ERA5-based** kernels [^2]
-3. **SPECTRAL** kernels [^3]
+2. **SPECTRAL** kernels [^2]
 
 Where the first two are broadband.
 
@@ -13,14 +12,11 @@ Paths should be specified appropriately based on how datasets are organized:
 
 ## Paramaters
 - **`anomaly_method`** : the tool allows different methods for calculating anomalies and handling climatology. Options are *climatology* (monthly averaged) or *running_mean*.
-- **`use_atm_mask`** : if **`True`**, applies the stratospheric mask (Reichler algorithm).
 - **`save_pattern`** : if **`True`**, saves the full spatial anomaly patterns alongside the global means.
 - **`num_year_regr`** : number of years to group into chunks for the linear regression feedback calculation.
 - **`time_range_clim`** / **`time_range_exp`** : restricts the analysis to a specific temporal window. Leave **`time_range_exp`** empty to automatically match the reference dataset's length.
 
 [^1]: Dataset: Huang, Yi (2022), “ERA-interim reanalysis based radiative kernels”, Mendeley Data, V1, doi: 10.17632/3drx8fmmz9.1 
 Huang, Y., Y. Xia, and X. Tan (2017), On the pattern of CO2 radiative forcing and poleward energy transport, J. Geophys. Res. Atmos., 122, 10,578–10,593. https://doi.org/10.1002/2017JD027221 
-[^2]: Dataset: Huang, Han; Huang, Yi (2023), “Data for ERA5 radiative kernels”, Mendeley Data, V4, doi: 10.17632/vmg3s67568.4
-Huang, H., & Huang, Y. (2023). Radiative sensitivity quantified by a new set of radiation flux kernels  based on the ECMWF Reanalysis v5 (ERA5). Earth System Science Data, 15(7), 3001–3021. https://doi.org/10.5194/essd-15-3001-2023
-[^3]: Dataset: Della Fera, S. (2026). Clear-sky Spectral Kernels [Data set]. Zenodo. https://doi.org/10.5281/zenodo.21245639
+[^2]: Dataset: Della Fera, S. (2026). Clear-sky Spectral Kernels [Data set]. Zenodo. https://doi.org/10.5281/zenodo.21245639
 Della Fera, S., Fabiano, F., Raspollini, P., Ridolfi, M., Von Hardenberg, J., & Cortesi, U. (2025). Reproducing and Attributing IASI Radiance Trends with EC-Earth Climate Model Simulations. Journal of Climate, 38(23), 6943-6959. https://doi.org/10.1175/JCLI-D-25-0034.1 
