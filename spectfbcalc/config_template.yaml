@@ -1,9 +1,9 @@
 kernels:
    HUANG:
-      path_input: "../kernels/Huang/toa/"
+      path_input: "../kernels/huang/kernel-highR/toa/"
       filename_template: "RRTMG_{}_toa_{}_highR.nc"
    SPECTRAL:
-      path_input: "../kernels/spectral/toa/"
+      path_input: "../kernels/spectral/toa_all/"
    
 file_paths:
    reference_dataset: "../sample_data/reference/"
@@ -14,12 +14,12 @@ file_paths:
 control_type: 'PI'
 exp_type: '4x'
 
-exp_name: "model_1"
+exp_name: "test"
 
-anomaly_method: "" #specify the anomaly method: climatology, running_m, climatology_mean, running_m_mean
-save_pattern: False
-num_year_regr: 10 #number of years to group for regression
-num_running_years_trend: 25 #number of years to group for running trend
+anomaly_method: "climatology" #specify the anomaly method: climatology, running_m, climatology_mean, running_m_mean
+save_pattern: True
+num_year_regr: 1 #number of years to group for regression
+num_running_years_trend: 3 #number of years to group for running trend
 time_range_clim: #this is the time range for the reference dataset 
    start: ""
    end: ""
