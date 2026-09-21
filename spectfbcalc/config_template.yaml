@@ -6,8 +6,8 @@ kernels:
       path_input: "../kernels/spectral/toa_all/"
    
 file_paths:
-   reference_dataset: "../sample_data/reference/"
-   experiment_dataset: "../sample_data/experiment/"
+   reference_dataset: "../../sample_data/reference/"
+   experiment_dataset: "../../sample_data/experiment/"
    pressure_data: "" #to specify if you have ps values in a different file and not in an array
    output: "../output/"
 

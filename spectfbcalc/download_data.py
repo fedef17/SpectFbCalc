@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Download datasets (Huang kernels and spectral TOA kernels, sample data).
+Download datasets (Huang kernels and spectral TOA kernels).
 
 Usage:
     python download_data.py
@@ -11,7 +11,7 @@ Recommended: run from a terminal in the background
 Notes:
     - Re-running the script after an interruption skips files that are
       already present with a matching checksum (automatic resume).
-    - To add a new Zenodo dataset later (e.g. sample data), just add a
+    - To add a new Zenodo dataset later, just add a
       new entry to the DOWNLOADS list.
 """
 
@@ -35,9 +35,9 @@ import zipfile
 # - exclude_substrings: files whose name contains any of these are skipped
 #   (pass an empty list to download everything)
 ZENODO_DOWNLOADS = [
-    ("21245639", "../kernels/spectral/toa_clear", ["co2", "ch4", "ozo", "n2o"]),
-    ("21246421", "../kernels/spectral/toa_all", ["co2", "ch4", "ozo", "n2o"]),
-    # ("<record_id>", "../data/sample", []),  # ADD SAMPLE DATA
+    ("21245639", "../kernels/spectral/toa_clear", []),
+    ("21246421", "../kernels/spectral/toa_all", [])
+    # ("<record_id>", "../data/sample", []), 
 ]
 
 # Mendeley Data datasets: no per-file API, download the "Download All" zip

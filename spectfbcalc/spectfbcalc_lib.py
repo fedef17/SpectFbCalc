@@ -11,7 +11,6 @@ analysis for feedback quantification.
 
 Supported Radiative Kernels:
     * HUANG (Huang, Y. et al., 2017)
-    * ERA5 (Huang et Huang, 2023)
     * SPECTRAL (Della Fera, s. et al., 2025)
 
 Dependencies:
@@ -1170,9 +1169,14 @@ def load_spectral_kernel(cart_k: str) -> tuple[dict[tuple[str, str], xr.DataArra
         Placeholder for the `dp` (pressure thickness) variable, which is not 
         returned by this specific loader.
     """
+    # tips = {
+    #     "clear": ("clr", "clear_sky_fluxes_use"),
+    #     "cloudy":   ("cld", "all_sky_fluxes_use"),
+    # }
+
     tips = {
-        "clear": ("clr", "clear_sky_fluxes_use"),
-        "cloudy":   ("cld", "all_sky_fluxes_use"),
+        "clear": ("clr", "toa_clear"),
+        "cloudy":   ("cld", "toa_all"),
     }
 
     # variable name mapping: nc_name → out_name

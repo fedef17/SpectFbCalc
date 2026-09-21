@@ -53,7 +53,7 @@ def save_feedback_output(output, out_path_txt, out_path_nc=None):
         with open(out_path_txt, "w") as f:
             def write_block(name, results_dict):
                 f.write(f"{name} feedback:\n")
-                for key in ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'albedo', 'cloud']:
+                for key in ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor', 'water-vapor-lw', 'albedo', 'cloud']:
                     result = results_dict.get((name, key))
                     if result is not None:
                         f.write(f"{key.replace('_', '-') + ' feedback'}: {result.slope:.4f}\n")
