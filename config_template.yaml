@@ -1,15 +1,15 @@
 kernels:
    HUANG:
-      path_input: "../kernels/huang/kernel-highR/toa/"
+      path_input: "/kernels/huang/kernel-highR/toa/"
       filename_template: "RRTMG_{}_toa_{}_highR.nc"
    SPECTRAL:
-      path_input: "../kernels/spectral/toa_all/"
+      path_input: "/kernels/spectral/"
    
 file_paths:
-   reference_dataset: "../../sample_data/reference/"
-   experiment_dataset: "../../sample_data/experiment/"
+   reference_dataset: "/sample_data/reference/"
+   experiment_dataset: "/sample_data/experiment/"
    pressure_data: "" #to specify if you have ps values in a different file and not in an array
-   output: "../output/"
+   output: "/output/"
 
 control_type: 'PI'
 exp_type: '4x'
@@ -28,10 +28,10 @@ time_range_exp: #this is the time range for the experiment dataset, give it empt
    end: ""
 
 lon_range: #this is the longitude range for the dataset, give it empty if you want to use the same as the reference dataset
-   start: ""
-   end: ""
+   start:
+   end: 
 lat_range: #this is the latitude range for the dataset, give it empty if you want to use the same as the reference dataset
-   start: ""
-   end: ""
+   start:
+   end:
 
 time_chunk: 12

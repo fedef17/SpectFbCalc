@@ -511,8 +511,8 @@ def plot_toa_anomaly(experiment, dRt_dict, title, sky="clr", output_file=None):
         label="Sum of dRt Components (Kernels)"
     )
 
-    plt.xlabel("Year")
-    plt.ylabel("Radiative Anomaly [W/m²]")
+    plt.xlabel("Year", fontsize=12)
+    plt.ylabel("Radiative Anomaly [W/m²]", fontsize=12)
     plt.title(f"{title} ({sky.upper()} sky)", fontsize=14, fontweight='bold')
     plt.xticks(years, [str(int(y)) for y in years])
     plt.axhline(0, color="gray", linestyle="--", linewidth=1)
@@ -524,6 +524,143 @@ def plot_toa_anomaly(experiment, dRt_dict, title, sky="clr", output_file=None):
     if output_file:
         plt.savefig(output_file, dpi=300, bbox_inches="tight")
         print(f"Plot saved: {output_file}")
-    else:
-        plt.show()
-    plt.close()
+    
+    plt.show()
+
+def plot_spectral_feedbacks(input_dir, title="Spectral Feedback Decomposition", sky="clr", components=None, output_file=None):
+    """
+    Plot spectral feedback components as a function of frequency/wavenumber.
+
+    Parameters
+    ----------
+    input_dir : str
+        Directory containing the spectral feedback NetCDF files (e.g., 'feedback_planck-surf_clr.nc').
+    title : str
+        Base title for the plot.
+    sky : {'clr', 'cld'}, optional
+        Sky condition to plot. Default is 'clr'.
+    components : list of str, optional
+        List of feedback components to include. If None, defaults to the standard LW set.
+    output_file : str, optional
+        Path to save the figure. If None, plt.show() is called interactively.
+    """
+    if components is None:
+        components = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor-lw']
+
+    plt.figure(figsize=(10, 5))
+    plotted = False
+
+    for comp in components:
+        file_path = os.path.join(input_dir, f"feedback_{comp}_{sky}.nc")
+        
+        if os.path.exists(file_path):
+            ds = xr.open_dataset(file_path)
+            var = list(ds.data_vars)[0]
+            
+            x = ds['freq'].values
+            y = ds[var].values
+            
+            plt.plot(x, y, label=comp.replace('-', ' ').capitalize(), linewidth=1.5)
+            plotted = True
+        else:
+            print(f"⚠️ Warning: File not found {file_path}")
+
+    if not plotted:
+        print(f"❌ No valid data found to plot in {input_dir} for sky={sky}")
+        plt.close()
+        return
+
+    plt.axhline(0, color='black', linestyle='--', linewidth=0.8)
+    plt.title(f"{title} ({sky.upper()} Sky)", fontsize=14, fontweight='bold')
+    plt.xlabel("Frequency / Wavenumber [cm⁻¹]", fontsize=12)
+    plt.ylabel("Feedback Parameter [W/m² / K / cm⁻¹]", fontsize=12)
+    plt.legend()
+    plt.grid(True, linestyle=":", alpha=0.6)
+    plt.tight_layout()
+
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches="tight")
+        print(f"Spectral feedbacks plot saved: {output_file}")
+    
+    plt.show()
+
+
+def plot_spectral_closure(experiment, dRt_dict, title, sky="clr", output_file=None):
+    """
+    Plot Outgoing Longwave Radiation (OLR) anomaly alongside spectral dRt components.
+    """
+    var_olr = 'rlutcs' if sky == 'clr' else 'rlut'
+    if var_olr not in experiment.ds_anom:
+        raise KeyError(f"Variable {var_olr} not found in ds_anom.")
+        
+    # Media globale e annuale dell'OLR del modello
+    olr_anom = experiment.ds_anom[var_olr]
+    olr_anom_gm = ctl.global_mean(olr_anom)
+    
+    time_coord = 'time' if 'time' in olr_anom_gm.coords else 'time_counter'
+    olr_annual = olr_anom_gm.groupby(f'{time_coord}.year').mean(time_coord)
+    
+    years = olr_annual['year'].values
+    vals_olr = olr_annual.values
+
+    expected_comps = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor-lw']
+
+    dRt_components = []
+    comp_labels = []
+
+    for comp in expected_comps:
+        if (sky, comp) in dRt_dict:
+            da = dRt_dict[(sky, comp)]
+            
+            if 'freq' in da.dims:
+                da = da.sum(dim='freq')
+                
+            if time_coord in da.coords or time_coord in da.dims:
+                da = da.groupby(f'{time_coord}.year').mean(time_coord)
+            
+            dRt_components.append(da)
+            comp_labels.append(comp.replace('-', ' ').capitalize())
+            
+    if not dRt_components:
+        raise ValueError(f"No spectral dRt components found for sky='{sky}'")
+    
+    aligned = xr.align(*dRt_components, join="inner")
+    dRt_sum = sum(aligned)
+    
+    offset = vals_olr[0] - dRt_sum.values[0]
+
+    plt.figure(figsize=(12, 5))
+    
+    plt.plot(years.astype(int), vals_olr, color="black", marker="o", linestyle="-", label="OLR Anomaly (Model)")
+
+    color_cycle = ["tab:blue", "tab:green", "tab:purple", "tab:orange"]
+    for i, (comp_da, lab) in enumerate(zip(aligned, comp_labels)):
+        plt.plot(
+            comp_da['year'].values.astype(int), 
+            comp_da.values, 
+            marker="s", linestyle="--", alpha=0.7,
+            label=lab, color=color_cycle[i % len(color_cycle)]
+        )
+
+    plt.plot(
+        dRt_sum['year'].values.astype(int), 
+        dRt_sum.values + offset, 
+        color="red", linestyle="-", linewidth=2.5,
+        label="Sum of Spectral LW Components"
+    )
+
+    plt.xlabel("Year", fontsize=12)
+    plt.ylabel("Longwave Radiative Anomaly [W/m²]", fontsize=12)
+    plt.title(f"{title} - Spectral LW ({sky.upper()} sky)", fontsize=14, fontweight='bold')
+    plt.xticks(years, [str(int(y)) for y in years])
+    plt.axhline(0, color="gray", linestyle="--", linewidth=1)
+    
+    plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5))
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.tight_layout()
+
+    if output_file:
+        plt.savefig(output_file, dpi=300, bbox_inches="tight")
+        print(f"Spectral closure plot saved: {output_file}")
+    
+    plt.show()
