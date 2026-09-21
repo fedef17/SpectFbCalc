@@ -489,6 +489,7 @@ def plot_toa_anomaly(experiment, dRt_dict, title, sky="clr", output_file=None):
     
     aligned = xr.align(*dRt_components, join="inner")
     dRt_sum = sum(aligned)
+    offset = vals_toa[0] - dRt_sum.values[0]
 
     plt.figure(figsize=(12, 5))
     
@@ -505,7 +506,7 @@ def plot_toa_anomaly(experiment, dRt_dict, title, sky="clr", output_file=None):
 
     plt.plot(
         dRt_sum['year'].values.astype(int), 
-        dRt_sum.values, 
+        dRt_sum.values+offset, 
         color="red", linestyle="-", linewidth=2.5,
         label="Sum of dRt Components (Kernels)"
     )
