@@ -3,10 +3,10 @@
 Download datasets (Huang kernels and spectral TOA kernels).
 
 Usage:
-    python download_data.py
+    python download_kernels.py
 
 Recommended: run from a terminal in the background 
-    nohup python download_data.py > download_data.log 2>&1 &
+    nohup python download_kernels.py > download_kernels.log 2>&1 &
 
 Notes:
     - Re-running the script after an interruption skips files that are

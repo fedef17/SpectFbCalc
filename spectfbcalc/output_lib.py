@@ -527,6 +527,7 @@ def plot_toa_anomaly(experiment, dRt_dict, title, sky="clr", output_file=None):
     
     plt.show()
 
+# --------- Spectral ------------
 def plot_spectral_feedbacks(input_dir, title="Spectral Feedback Decomposition", sky="clr", components=None, output_file=None):
     """
     Plot spectral feedback components as a function of frequency/wavenumber.

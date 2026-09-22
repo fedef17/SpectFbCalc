@@ -39,7 +39,7 @@ There are some advanced functions implemented in addition to the principal pipel
 1. Stratospheric masking (**`mask_strato`**): it generates a mask for atmospheric temperature data by implementing the Reichler algorithm. [^3]
 2. Water vapour normalisation factors (**`Kq_fact`**): it calculates normalisation coefficient to normalize the water vapor kernel, which usually corresponds to a change in specific humidity due to an increase of atm temp by 1 K, keeping RH constant.
 
-The entire process preserves dask’s lazy evaluation until the very last possible moment. The diagnostic functions such as **`check_lazy_loading`** monitor the computational state by tracking the theoretical size in megabytes and the number of chunks generated. Data are calculated explicitly (**`.compute()`**) only in the following cases:
+The entire process preserves Dask’s lazy evaluation until the very last possible moment. The diagnostic functions such as **`check_lazy_loading`** monitor the computational state by tracking the theoretical size in megabytes and the number of chunks generated. Data are calculated explicitly in memory (**`.compute()`**) only in the following cases:
 - Saving remapped intermediate files to disk (**`save_remapped = True`**).
 - Calculating fixed climatology matrices (*ds_clim*).
 - Extracting coordinate vectors and surface pressure for loops on geographical nodes.
