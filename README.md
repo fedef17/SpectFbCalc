@@ -4,7 +4,7 @@
 SpectFbCalc is a Python-based tool designed for calculating radiative anomalies and climate feedbacks using synthetic kernels and climate model outputs. It facilitates the analysis of radiative biases and climate feedbacks and explores the impact of parameter tuning on climate model performance and sensitivity.
 
 ## Features
-- **Kernel-based computation:** Supports both broadband (Huang, ERA5) and spectral kernels.
+- **Kernel-based computation:** Supports both broadband and spectral kernels.
 - **CMIP Compatibility:** Works seamlessly with standard CMIP CMOR output.
 - **Configurable Setup:** Fully driven by a YAML configuration file for easy experimental setups.
 - **Dask Integration:** Preserves lazy evaluation for handling large model outputs efficiently.
@@ -20,8 +20,23 @@ bash install.sh
 ```
 
 ## Quickstart 
+### Downloading Kernels and Data
+Radiative kernels (spectral and broadband) are hosted separately on Zenodo
+and Mendeley Data and are not included in the repository. Download them with:
+```bash
+cd spectfbcalc/
+nohup python download_kernels.py > download_kernels.log 2>&1 &
+disown
+```
+This runs in the background. Track progress with:
+```bash
+tail -f download_kernels.log
+```
+**Note**: If interrupted, simply re-run the same command: already-downloaded files are skipped automatically.
+
+### Try the tool
 To see SpectFbCalc in action rapidly, we provide a Jupyter Notebook with sample low-resolution data. 
 
-1. Clone the repository as shown above.
+1. Clone the repository and download the kernels as shown above.
 2. Launch Jupyter: `jupyter notebook`
 3. Open `template_spectfbcalc.ipynb` and run the cells. 

@@ -3,7 +3,7 @@
 
 ### Kernel
 Class used for loading and standardising external radiative kernels. 
-- Supported kernel types: HUANG [^1], ERA5 [^2], and SPECTRAL [^3].
+- Supported kernel types: HUANG [^1] and SPECTRAL [^2].
 - Surface pressure management when HUANG kernel are used **`recompute_dp`**. If the experiment contains surface pressure, the class recalculates the atmospheric layers based on it.
 
 ### Experiment
@@ -31,15 +31,15 @@ Pipeline:
 
 Users of the tool can then decide how to calculate the anomalies choosing the method:
  - *climatology*: uses monthly averaged climatology (optimised using flox if available, otherwise via lazy expansion with **`expand_clim`**);
- - *running_mean*: uses 21-years running mean climatology; `cit Zelinka for 21 years ???`
+ - *running_mean*: uses custom-years running mean climatology; 
 
 
 ## Utilities and diagnostic support functions
 There are some advanced functions implemented in addition to the principal pipeline:
-1. Stratospheric masking (**`mask_strato`**): it generates a mask for atmospheric temperature data by implementing the Reichler algorithm. [^4]
+1. Stratospheric masking (**`mask_strato`**): it generates a mask for atmospheric temperature data by implementing the Reichler algorithm. [^3]
 2. Water vapour normalisation factors (**`Kq_fact`**): it calculates normalisation coefficient to normalize the water vapor kernel, which usually corresponds to a change in specific humidity due to an increase of atm temp by 1 K, keeping RH constant.
 
-The entire process preserves dask’s lazy evaluation until the very last possible moment. The diagnostic functions such as **`check_lazy_loading`** monitor the computational state by tracking the theoretical size in megabytes and the number of chunks generated. Data are calculated explicitly (**`.compute()`**) only in the following cases:
+The entire process preserves Dask’s lazy evaluation until the very last possible moment. The diagnostic functions such as **`check_lazy_loading`** monitor the computational state by tracking the theoretical size in megabytes and the number of chunks generated. Data are calculated explicitly in memory (**`.compute()`**) only in the following cases:
 - Saving remapped intermediate files to disk (**`save_remapped = True`**).
 - Calculating fixed climatology matrices (*ds_clim*).
 - Extracting coordinate vectors and surface pressure for loops on geographical nodes.
@@ -47,8 +47,6 @@ While these preprocessing modules are essential for standardizing datasets, Spec
 
 [^1]: Dataset: Huang, Yi (2022), “ERA-interim reanalysis based radiative kernels”, Mendeley Data, V1, doi: 10.17632/3drx8fmmz9.1 
 Huang, Y., Y. Xia, and X. Tan (2017), On the pattern of CO2 radiative forcing and poleward energy transport, J. Geophys. Res. Atmos., 122, 10,578–10,593. https://doi.org/10.1002/2017JD027221 
-[^2]: Dataset: Huang, Han; Huang, Yi (2023), “Data for ERA5 radiative kernels”, Mendeley Data, V4, doi: 10.17632/vmg3s67568.4
-Huang, H., & Huang, Y. (2023). Radiative sensitivity quantified by a new set of radiation flux kernels  based on the ECMWF Reanalysis v5 (ERA5). Earth System Science Data, 15(7), 3001–3021. https://doi.org/10.5194/essd-15-3001-2023
-[^3]: Dataset: Della Fera, S. (2026). Clear-sky Spectral Kernels [Data set]. Zenodo. https://doi.org/10.5281/zenodo.21245639
+[^2]: Dataset: Della Fera, S. (2026). Clear-sky Spectral Kernels [Data set]. Zenodo. https://doi.org/10.5281/zenodo.21245639
 Della Fera, S., Fabiano, F., Raspollini, P., Ridolfi, M., Von Hardenberg, J., & Cortesi, U. (2025). Reproducing and Attributing IASI Radiance Trends with EC-Earth Climate Model Simulations. Journal of Climate, 38(23), 6943-6959. https://doi.org/10.1175/JCLI-D-25-0034.1 
-[^4]: Reichler, T., M. Dameris, and R. Sausen (2003), Determining the tropopause height from gridded data, Geophys. Res. Lett., 30, 20. https://doi.org/10.1029/2003GL018240
+[^3]: Reichler, T., M. Dameris, and R. Sausen (2003), Determining the tropopause height from gridded data, Geophys. Res. Lett., 30, 20. https://doi.org/10.1029/2003GL018240

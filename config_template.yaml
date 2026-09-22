@@ -1,28 +1,25 @@
 kernels:
-    ERA5:
-      path_input: "./kernels/Huang_ERA5/"
-      filename_template: "ERA5_kernel_{}_TOA.nc"
-    HUANG:
-      path_input: "./kernels/Huang/toa/"
+   HUANG:
+      path_input: "/kernels/huang/kernel-highR/toa/"
       filename_template: "RRTMG_{}_toa_{}_highR.nc"
-    SPECTRAL:
-      path_input: "./kernels/spectral/toa/"
+   SPECTRAL:
+      path_input: "/kernels/spectral/"
    
 file_paths:
-   reference_dataset: "./sample_data/reference_data/"
-   experiment_dataset: "./sample_data/experiment_data/"
+   reference_dataset: "/sample_data/reference/"
+   experiment_dataset: "/sample_data/experiment/"
    pressure_data: "" #to specify if you have ps values in a different file and not in an array
-   output: "./output/"
+   output: "/output/"
 
 control_type: 'PI'
 exp_type: '4x'
 
-exp_name: "model_1"
+exp_name: "test"
 
-anomaly_method: "" #specify the anomaly method: climatology, running_m, climatology_mean, running_m_mean
-save_pattern: False
-num_year_regr: 10 #number of years to group for regression
-num_running_years_trend: 25 #number of years to group for running trend
+anomaly_method: "climatology" #specify the anomaly method: climatology, running_m, climatology_mean, running_m_mean
+save_pattern: True
+num_year_regr: 1 #number of years to group for regression
+num_running_years_trend: 3 #number of years to group for running trend
 time_range_clim: #this is the time range for the reference dataset 
    start: ""
    end: ""
@@ -31,10 +28,10 @@ time_range_exp: #this is the time range for the experiment dataset, give it empt
    end: ""
 
 lon_range: #this is the longitude range for the dataset, give it empty if you want to use the same as the reference dataset
-   start: ""
-   end: ""
+   start:
+   end: 
 lat_range: #this is the latitude range for the dataset, give it empty if you want to use the same as the reference dataset
-   start: ""
-   end: ""
+   start:
+   end:
 
 time_chunk: 12
