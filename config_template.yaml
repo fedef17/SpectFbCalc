@@ -1,15 +1,15 @@
 kernels:
    HUANG:
-      path_input: "/kernels/huang/kernel-highR/toa/"
+      path_input: "./kernels/huang/kernel-highR/toa/"
       filename_template: "RRTMG_{}_toa_{}_highR.nc"
    SPECTRAL:
-      path_input: "/kernels/spectral/"
+      path_input: "./kernels/spectral/"
    
 file_paths:
-   reference_dataset: "/sample_data/reference/"
-   experiment_dataset: "/sample_data/experiment/"
+   reference_dataset: "./sample_data/reference/"
+   experiment_dataset: "./sample_data/experiment/"
    pressure_data: "" #to specify if you have ps values in a different file and not in an array
-   output: "/output/"
+   output: "./output_test/"
 
 control_type: 'PI'
 exp_type: '4x'

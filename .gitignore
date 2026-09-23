@@ -9,3 +9,7 @@ slurm*out
 slurm*err
 sp*.out
 sp*.err
+kernels/
+sample_data/
+output/
+output_test/
