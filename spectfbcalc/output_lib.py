@@ -67,23 +67,19 @@ def save_feedback_output(output, out_path_txt, out_path_nc=None):
 
     # ---------- NetCDF output ----------
     if out_path_nc and fb_pattern is not None:
-        # Dummy lat/lon if not available in pattern
-        lat = np.linspace(-90, 90, 73)
-        lon = np.linspace(0, 360, 144, endpoint=False)
-
         data_vars = {}
+        
+        for (cloud_type, component), (slope, stderr) in fb_pattern.items():
+            key_slope = f"{cloud_type}_{component}_slope"
+            key_stderr = f"{cloud_type}_{component}_stderr"
+            
+            safe_key_slope = key_slope.replace("(", "").replace(")", "").replace(",", "").replace("'", "").replace(" ", "_")
+            safe_key_stderr = key_stderr.replace("(", "").replace(")", "").replace(",", "").replace("'", "").replace(" ", "_")
+            
+            data_vars[safe_key_slope] = slope
+            data_vars[safe_key_stderr] = stderr
 
-        # Add standard component patterns
-        if fb_pattern:
-            for (cloud_type, component), (slope, stderr) in fb_pattern.items():
-                key_slope = f"{cloud_type}_{component}_slope"
-                key_stderr = f"{cloud_type}_{component}_stderr"
-                safe_key_slope = key_slope.replace("(", "").replace(")", "").replace(",", "").replace("'", "").replace(" ", "_")
-                data_vars[safe_key_slope] = (["lat", "lon"], slope.data if hasattr(slope, "data") else slope)
-                safe_key_stderr = key_stderr.replace("(", "").replace(")", "").replace(",", "").replace("'", "").replace(" ", "_")
-                data_vars[safe_key_stderr] = (["lat", "lon"], stderr.data if hasattr(stderr, "data") else stderr)
-
-        ds = xr.Dataset(data_vars=data_vars, coords={"lat": lat, "lon": lon})
+        ds = xr.Dataset(data_vars=data_vars)
         ds.to_netcdf(out_path_nc)
         print(f"Saved feedback spatial patterns to {out_path_nc}")
 
@@ -131,7 +127,7 @@ def plot_fb_pattern(slope, stderr, title, output_folder, filename_prefix="fb_pat
         ax.add_feature(cfeature.LAND, facecolor="lightgray", alpha=0.3, zorder=-1)
 
         # Gridlines
-        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color="gray", alpha=0.5, linestyle="--")
+        gl = ax.gridlines(draw_labels=True, linewidth=0, color="none")
         gl.top_labels = False
         gl.right_labels = False
 
