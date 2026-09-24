@@ -39,4 +39,4 @@ To see SpectFbCalc in action rapidly, we provide a Jupyter Notebook with sample 
 
 1. Clone the repository and download the kernels as shown above.
 2. Launch Jupyter: `jupyter notebook`
-3. Open `template_spectfbcalc.ipynb` and run the cells. 
+3. Open `run_test.ipynb` and run the cells. 

@@ -10,7 +10,7 @@ conda activate spectfbcalc
 ```bash
 jupyter notebook
 ```
-3. Navigate to **`template_spectfbcalc.ipynb`** and execute the cells to see an example usage.
+3. Navigate to **`run_test.ipynb`** and execute the cells to see an example usage.
 **Important**: see instruction to download the dataset in the notebook or in the README.md.
 
 ## Initial Setup in the Notebook
