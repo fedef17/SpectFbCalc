@@ -1169,10 +1169,10 @@ def load_spectral_kernel(cart_k: str) -> tuple[dict[tuple[str, str], xr.DataArra
         Placeholder for the `dp` (pressure thickness) variable, which is not 
         returned by this specific loader.
     """
-    # tips = {
+    #tips = {
     #     "clear": ("clr", "clear_sky_fluxes_use"),
     #     "cloudy":   ("cld", "all_sky_fluxes_use"),
-    # }
+    #}
 
     tips = {
         "clear": ("clr", "toa_clear"),
@@ -1956,7 +1956,9 @@ def mask_strato(ta: xr.DataArray, debug = False) -> xr.DataArray:
 #         dws = ctl.transform_to_dataarray(T, dws, 'dlnws')
    
 #     return dws
-
+def mask_land_sea(kernel: xr.DataArray) -> xr.DataArray:
+    
+    return rad_anomaly_masked
 
 def q2(e: float | np.ndarray | xr.DataArray, p: float | np.ndarray | xr.DataArray = 1e3) -> float | np.ndarray | xr.DataArray:
     """
@@ -2161,7 +2163,7 @@ def month_calc(anom: xr.DataArray, k: xr.DataArray) -> xr.DataArray:
 ############ RADIATIVE ANOMALY FUNCTIONS #############
 #PLANCK SURFACE
 
-def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: str, save_pattern: bool = False) -> dict[tuple[str, str], xr.DataArray]:
+def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: str, use_land_sea_mask: bool = True, save_pattern: bool = False) -> dict[tuple[str, str], xr.DataArray]:
     """
     Compute the Planck surface radiation anomaly using climate model data and radiative kernels.
 
@@ -2173,6 +2175,8 @@ def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: st
         Instance of the Kernel class containing the loaded radiative kernels.
     cart_out
         Output directory where results will be saved.
+    use_land_sea_mask
+        If True, masks values above land/ocean (according to the mask provided) before computing the global mean.
     save_pattern
         If True, save the full spatial anomaly patterns in addition to global means.
 
@@ -2221,6 +2225,9 @@ def Rad_anomaly_planck_surf(experiment: Experiment, kernel: Kernel, cart_out: st
             dRt.attrs["description"] = f"{tip} surface Planck dRt pattern"
             dRt.to_netcdf(cart_out + "dRt_planck-surf_pattern_" + tip +".nc", format="NETCDF4")
 
+        if use_land_sea_mask:
+            mask = mask_land_sea(k)
+        
         #Then compute and save global mean
         dRt_glob = ctl.global_mean(dRt)
         # weights = np.cos(np.deg2rad(field[latn]))
@@ -2656,7 +2663,7 @@ def Rad_anomaly_cloud(experiment: Experiment, cart_out: str, output_lw_sw: bool 
 
 #ALL RAD_ANOM COMPUTATION
 
-def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart_out: str, use_strat_mask: bool = True, save_pattern: bool = False, force_recompute: bool = True) -> tuple[dict, dict, dict, dict, dict | xr.DataArray]:
+def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart_out: str, use_strat_mask: bool = True, use_land_sea_mask: bool = False, save_pattern: bool = False, force_recompute: bool = True) -> tuple[dict, dict, dict, dict, dict | xr.DataArray]:
     """
     Compute or load all radiative kernel-based anomaly components.
 
@@ -2677,6 +2684,8 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
         Output directory where results and intermediate files will be saved.
     use_strat_mask
         If True, masks stratospheric temperature changes when computing atmospheric feedbacks.
+    use_land_sea_mask
+        If True, masks values above land/ocean (according to the mask provided) before computing the global mean.
     save_pattern
         If True, computes and saves the full spatial feedback patterns for each component.
     force_recompute
@@ -2701,7 +2710,7 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
     print('planck surf')
     path = os.path.join(cart_out, "dRt_planck-surf_global_clr.nc")
     if not os.path.exists(path) or force_recompute:
-        anom_ps = Rad_anomaly_planck_surf(experiment, kernel, cart_out, save_pattern)
+        anom_ps = Rad_anomaly_planck_surf(experiment, kernel, cart_out, use_land_sea_mask, save_pattern)
     else:
         print(f'Reading already computed anomaly from {path}')
         anom_ps = xr.open_dataset(path)
@@ -2709,7 +2718,7 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
     print('planck atm')
     path = os.path.join(cart_out, "dRt_planck-atmo_global_clr.nc")
     if not os.path.exists(path) or force_recompute:
-        anom_pal = Rad_anomaly_planck_atm_lr(experiment, kernel, cart_out, use_strat_mask, save_pattern)
+        anom_pal = Rad_anomaly_planck_atm_lr(experiment, kernel, cart_out, use_strat_mask, use_land_sea_mask, save_pattern)
     else:
         print(f'Reading already computed anomaly from {path}')
         anom_pal = xr.open_dataset(path)
@@ -2717,7 +2726,7 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
     print('albedo')
     path = os.path.join(cart_out, "dRt_albedo_global_clr.nc")
     if not os.path.exists(path) or force_recompute:
-        anom_a = Rad_anomaly_albedo(experiment, kernel, cart_out, save_pattern)
+        anom_a = Rad_anomaly_albedo(experiment, kernel, cart_out, use_land_sea_mask, save_pattern)
     else:
         print(f'Reading already computed anomaly from {path}')
         anom_a = xr.open_dataset(path)
@@ -2728,7 +2737,7 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
     else:
         path = os.path.join(cart_out, "dRt_water-vapor-lw_global_clr.nc")
     if not os.path.exists(path) or force_recompute:
-        anom_wv = Rad_anomaly_wv(experiment, control, kernel, cart_out, use_strat_mask, save_pattern)
+        anom_wv = Rad_anomaly_wv(experiment, control, kernel, cart_out, use_strat_mask, use_land_sea_mask, save_pattern)
     else:
         print(f'Reading already computed anomaly from {path}')
         anom_wv = xr.open_dataset(path) 
@@ -2738,7 +2747,7 @@ def calc_anoms(experiment: Experiment, control: Experiment, kernel: Kernel, cart
         print('cloud')
         path = os.path.join(cart_out, "dRt_cloud_global.nc")
         if not os.path.exists(path) or force_recompute:
-            anom_cloud = Rad_anomaly_cloud(experiment, cart_out, save_pattern=save_pattern)
+            anom_cloud = Rad_anomaly_cloud(experiment, cart_out, use_land_sea_mask, save_pattern=save_pattern)
         else:
             print(f'Reading already computed anomaly from {path}')
             anom_cloud = xr.open_dataset(path) 
@@ -3239,7 +3248,7 @@ def calc_single_feedback(name: str, experiment: Experiment, kernel: Kernel, cart
         "fb_pattern": fb_pattern if save_pattern else None,
         }
 
-def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, control:  Experiment | None = None,  use_strat_mask: bool = True, save_pattern: bool = False, num_year_fb: int = 10) -> dict[tuple[str, str], tuple[xr.DataArray, xr.DataArray]]:
+def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, control:  Experiment | None = None,  use_strat_mask: bool = True, use_land_sea_mask: bool = False, save_pattern: bool = False, num_year_fb: int = 10) -> dict[tuple[str, str], tuple[xr.DataArray, xr.DataArray]]:
 
     """
     Compute full radiative feedback decomposition and interannual regression
@@ -3257,6 +3266,8 @@ def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, cont
         Instance containing the control run datasets.
     use_strat_mask
         If True, masks stratospheric temperature changes when computing atmospheric feedbacks.
+    use_land_sea_mask
+        If True, masks values above land/ocean (according to the mask provided) before computing the global mean
     save_pattern
         If True, computes and saves the full spatial feedback patterns.
     num_year_fb : int, default 10
@@ -3276,7 +3287,7 @@ def calc_fb_spectral(experiment: Experiment, kernel: Kernel, cart_out: str, cont
     gtas = gtas.groupby((gtas.year-start_year) // num_year_fb * num_year_fb).mean()
     gtas= gtas.chunk({'year': -1})
 
-    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, save_pattern=save_pattern, force_recompute=False)
+    _rad_anoms = calc_anoms(experiment, control, kernel, cart_out, use_strat_mask=use_strat_mask, use_land_sea_mask=use_land_sea_mask, save_pattern=save_pattern, force_recompute=False)
     
     fbnams = ['planck-surf', 'planck-atmo', 'lapse-rate', 'water-vapor-lw']
     dRt={}
